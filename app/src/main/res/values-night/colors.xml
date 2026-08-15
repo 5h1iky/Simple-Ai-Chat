@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="md_theme_primary">#6DD1FF</color>
+    <color name="md_theme_onPrimary">#00344B</color>
+    <color name="md_theme_primaryContainer">#004B6A</color>
+    <color name="md_theme_onPrimaryContainer">#BFE8FF</color>
+
+    <color name="md_theme_secondary">#B5C9D9</color>
+    <color name="md_theme_onSecondary">#1F323F</color>
+    <color name="md_theme_secondaryContainer">#364857</color>
+    <color name="md_theme_onSecondaryContainer">#D1E4F5</color>
+
+    <color name="md_theme_tertiary">#D6BEE7</color>
+    <color name="md_theme_onTertiary">#3A2848</color>
+    <color name="md_theme_tertiaryContainer">#513F60</color>
+    <color name="md_theme_onTertiaryContainer">#F2DAFF</color>
+
+    <color name="md_theme_error">#FFB4AB</color>
+    <color name="md_theme_onError">#690005</color>
+    <color name="md_theme_errorContainer">#93000A</color>
+    <color name="md_theme_onErrorContainer">#FFDAD6</color>
+
+    <color name="md_theme_background">#191C1E</color>
+    <color name="md_theme_onBackground">#E1E3E5</color>
+    <color name="md_theme_surface">#191C1E</color>
+    <color name="md_theme_onSurface">#E1E3E5</color>
+    <color name="md_theme_surfaceVariant">#303336</color>
+    <color name="md_theme_onSurfaceVariant">#C1C7CD</color>
+    <color name="md_theme_outline">#8B9298</color>
+    <color name="md_theme_outlineVariant">#41484D</color>
+
+    <color name="bubble_user">#0066A0</color>
+    <color name="bubble_user_text">#FFFFFF</color>
+    <color name="bubble_ai">#303336</color>
+    <color name="bubble_ai_text">#E1E3E5</color>
+
+    <color name="splash_background">#001E2E</color>
+    <color name="splash_text">#6DD1FF</color>
+
+    <color name="card_bg">#2F3336</color>
+</resources>

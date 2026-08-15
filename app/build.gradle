@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'www.cetool.com'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'www.cetool.com'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.3.0'
+
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.16.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation 'androidx.activity:activity-ktx:1.10.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7'
+
+    // OkHttp + Gson 用于调用 AI API
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:okhttp-sse:4.12.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
+
+    // RecyclerView 用于聊天消息列表
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+
+    // Markwon 用于渲染 Markdown
+    implementation 'io.noties.markwon:core:4.6.2'
+
+    // DrawerLayout
+    implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
+
+    // Glide for image loading
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.16.0'
+}

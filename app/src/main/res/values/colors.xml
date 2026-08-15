@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary palette -->
+    <color name="md_theme_primary">#006487</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#BFE8FF</color>
+    <color name="md_theme_onPrimaryContainer">#001E2E</color>
+
+    <!-- Secondary palette -->
+    <color name="md_theme_secondary">#4E606E</color>
+    <color name="md_theme_onSecondary">#FFFFFF</color>
+    <color name="md_theme_secondaryContainer">#D1E4F5</color>
+    <color name="md_theme_onSecondaryContainer">#0A1D29</color>
+
+    <!-- Tertiary palette -->
+    <color name="md_theme_tertiary">#6A5779</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#F2DAFF</color>
+    <color name="md_theme_onTertiaryContainer">#241432</color>
+
+    <!-- Error -->
+    <color name="md_theme_error">#BA1A1A</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#FFDAD6</color>
+    <color name="md_theme_onErrorContainer">#410002</color>
+
+    <!-- Background / Surface -->
+    <color name="md_theme_background">#F8FDFF</color>
+    <color name="md_theme_onBackground">#191C1E</color>
+    <color name="md_theme_surface">#F8FDFF</color>
+    <color name="md_theme_onSurface">#191C1E</color>
+    <color name="md_theme_surfaceVariant">#DCE3E9</color>
+    <color name="md_theme_onSurfaceVariant">#41484D</color>
+    <color name="md_theme_outline">#71787E</color>
+    <color name="md_theme_outlineVariant">#C1C7CD</color>
+
+    <!-- Dark theme -->
+    <color name="md_theme_dark_primary">#6DD1FF</color>
+    <color name="md_theme_dark_onPrimary">#00344B</color>
+    <color name="md_theme_dark_primaryContainer">#004B6A</color>
+    <color name="md_theme_dark_onPrimaryContainer">#BFE8FF</color>
+    <color name="md_theme_dark_secondary">#B5C9D9</color>
+    <color name="md_theme_dark_onSecondary">#1F323F</color>
+    <color name="md_theme_dark_secondaryContainer">#364857</color>
+    <color name="md_theme_dark_onSecondaryContainer">#D1E4F5</color>
+    <color name="md_theme_dark_tertiary">#D6BEE7</color>
+    <color name="md_theme_dark_onTertiary">#3A2848</color>
+    <color name="md_theme_dark_tertiaryContainer">#513F60</color>
+    <color name="md_theme_dark_onTertiaryContainer">#F2DAFF</color>
+    <color name="md_theme_dark_error">#FFB4AB</color>
+    <color name="md_theme_dark_onError">#690005</color>
+    <color name="md_theme_dark_errorContainer">#93000A</color>
+    <color name="md_theme_dark_onErrorContainer">#FFDAD6</color>
+    <color name="md_theme_dark_background">#191C1E</color>
+    <color name="md_theme_dark_onBackground">#E1E3E5</color>
+    <color name="md_theme_dark_surface">#191C1E</color>
+    <color name="md_theme_dark_onSurface">#E1E3E5</color>
+    <color name="md_theme_dark_surfaceVariant">#41484D</color>
+    <color name="md_theme_dark_onSurfaceVariant">#E1E3E5</color>
+    <color name="md_theme_dark_outline">#8B9298</color>
+    <color name="md_theme_dark_outlineVariant">#41484D</color>
+
+    <!-- Chat bubbles -->
+    <color name="bubble_user">#006487</color>
+    <color name="bubble_user_text">#FFFFFF</color>
+    <color name="bubble_ai">#DCE3E9</color>
+    <color name="bubble_ai_text">#191C1E</color>
+
+    <!-- Settings cards -->
+    <color name="card_bg">#E9EBED</color>
+
+    <!-- Splash -->
+    <color name="splash_background">#001E2E</color>
+    <color name="splash_text">#6DD1FF</color>
+</resources>

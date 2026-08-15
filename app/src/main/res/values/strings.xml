@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SAChat</string>
+
+    <!-- 设置页 -->
+    <string name="settings_title">API 设置</string>
+    <string name="label_api_url">API 地址</string>
+    <string name="hint_api_url">例如：https://api.openai.com/v1</string>
+    <string name="label_api_key">API Key</string>
+    <string name="hint_api_key">sk-xxxxxxxxxxxxxxxx</string>
+    <string name="label_model">模型名称</string>
+    <string name="hint_model">例如：gpt-3.5-turbo</string>
+    <string name="btn_save">保存并开始聊天</string>
+    <string name="label_system_prompt">系统提示词（System Prompt）</string>
+    <string name="hint_system_prompt">例如：你是一个有用的助手。当前日期：{{cur_date}}</string>
+    <string name="hint_system_prompt_vars">可用变量：{{cur_date}} {{cur_time}} {{cur_datetime}}</string>
+
+    <!-- 默认系统提示词（首次使用或未自定义时生效） -->
+    <string name="default_system_prompt"><![CDATA[【语言规则】
+- 你的默认输出语言：简体中文
+- 禁止使用英文回复，除非用户明确要求"请用英文"
+- 所有思考、解释、举例均需使用中文
+- 即使输入是英文，也请先理解后再用中文回答
+- 在特殊环境下，例如编写代码环境，聊天中必须使用英文，或使用英文能使中文语言环境者更易理解的情况下，可以少量使用英文]]></string>
+
+    <!-- 聊天页 -->
+    <string name="hint_input">输入消息…</string>
+    <string name="btn_send">发送</string>
+    <string name="settings">设置</string>
+    <string name="clear_chat">清空对话</string>
+    <string name="new_conversation">新对话</string>
+    <string name="switch_conversation">切换对话</string>
+    <string name="delete_conversation">删除对话</string>
+    <string name="confirm_delete">确认删除</string>
+    <string name="confirm_delete_msg">确定要删除「%s」吗？此操作不可恢复。</string>
+    <string name="cancel">取消</string>
+    <string name="delete">删除</string>
+    <string name="retry">重试最后发送</string>
+    <string name="edit_system_prompt">编辑系统提示词</string>
+    <string name="system_prompt_for_conv">系统提示词（当前对话）</string>
+
+    <!-- 文件上传 -->
+    <string name="attach_file">附件</string>
+    <string name="select_file">选择文件</string>
+    <string name="file_text">文本文件</string>
+    <string name="file_image">图片</string>
+    <string name="file_unsupported">不支持的格式。仅支持 .txt 和图片文件</string>
+    <string name="file_too_large">文件过大（最大 20MB）</string>
+    <string name="image_compressing">正在压缩图片…</string>
+    <string name="toast_file_attached">已添加附件</string>
+    <string name="toast_file_reading">正在读取文件…</string>
+
+    <!-- 提示 -->
+    <string name="toast_config_saved">配置已保存</string>
+    <string name="toast_please_config">请先完成 API 设置</string>
+    <string name="toast_sending">正在发送…</string>
+    <string name="toast_conversation_created">已创建新对话</string>
+    <string name="toast_conversation_deleted">对话已删除</string>
+    <string name="toast_system_prompt_updated">系统提示词已更新</string>
+
+    <!-- 侧边栏 -->
+    <string name="nav_open">打开侧边栏</string>
+    <string name="nav_close">关闭侧边栏</string>
+
+    <!-- 关于页面 -->
+    <string name="about_author_label">作者</string>
+    <string name="about_feedback">反馈建议</string>
+    <string name="about_feedback_desc">遇到问题或有建议，点此联系作者</string>
+    <string name="disclaimer">免责声明</string>
+    <string name="disclaimer_desc">查看中英双语免责说明</string>
+    <string name="disclaimer_title">免责声明 / Disclaimer</string>
+
+    <!-- 免责声明内容（中英双语） -->
+    <string name="disclaimer_content"><![CDATA[
+<p><b>1. 非商业开源项目：</b>本软件为个人开发者维护的开源公益项目，不收取任何费用，亦不提供任何形式的商业担保或技术支持。<br/><i>Non-commercial open-source project: This software is an open-source non-profit project maintained by an individual developer. It charges no fees and provides no commercial warranty or technical support of any kind.</i></p>
+<p><b>2. 第三方服务依赖：</b>本软件内置的"免费模型"功能，依赖第三方服务商（如 OpenKilo、OpenCode Zen 等）提供的 API 接口。用户与 AI 的对话内容将被传输至用户所选的第三方服务器，开发者无法控制这些服务的数据处理行为，建议用户谨慎输入个人隐私信息。<br/><i>Dependence on third-party services: The built-in "free model" feature relies on API interfaces provided by third-party providers (such as OpenKilo, OpenCode Zen, etc.). Your conversation content will be transmitted to the third-party servers you select. The developer has no control over how these services process data, so please be cautious when entering personal or private information.</i></p>
+<p><b>3. 内容风险：</b>AI 生成的内容可能包含错误、偏见或不适宜信息，不代表开发者观点。用户需对使用 AI 产生的任何后果自行承担责任。<br/><i>Content risk: AI-generated content may contain errors, biases, or inappropriate information and does not represent the developer\'s views. Users are solely responsible for any consequences arising from their use of AI.</i></p>
+<p><b>4. 服务稳定性：</b>免费 API 由第三方提供，不保证 7x24 小时可用，随时可能因上游政策调整而中断或限流。<br/><i>Service stability: Free APIs are provided by third parties. Availability is not guaranteed 24/7, and the service may be interrupted or rate-limited at any time due to upstream policy changes.</i></p>
+<p><b>5. 声明更新：</b>开发者保留更新本免责声明的权利，更新后的版本将在应用内展示。<br/><i>Declaration updates: The developer reserves the right to update this disclaimer, and the updated version will be displayed within the application.</i></p>
+<p><b>本声明最后更新：2026-07-31</b><br/><i>Last updated: 2026-07-31</i></p>
+]]></string>
+
+    <!-- 聊天界面 -->
+    <string name="empty_state">开始对话吧</string>
+    <string name="label_user_name">我的昵称</string>
+    <string name="label_ai_name">AI 名称</string>
+    <string name="label_max_history">记忆历史消息轮数</string>
+    <string name="max_history_note">全局生效，所有对话与模式共用（范围 5~100）。值越大上下文越完整，但更慢且更耗 token；免费模型建议不超过 40。</string>
+
+    <!-- Free Gateway Integration: 预设服务商 -->
+    <string name="provider_preset">预设服务商</string>
+    <string name="provider_custom">自定义（手动输入）</string>
+    <string name="provider_open_kilo">OpenKilo 免费路由</string>
+    <string name="provider_open_code_zen">OpenCode Zen 免费模型</string>
+    <string name="provider_free_hint">免费服务无需密钥，由第三方提供，稳定性有限</string>
+    <string name="select_model">选择模型</string>
+    <string name="model_auto">自动路由</string>
+    <string name="model_nemotron_ultra">NVIDIA Nemotron 3 Ultra 550b（当期性能最强）</string>
+    <string name="model_stepfun">StepFun 3.7 Flash 196b（响应快）</string>
+    <string name="model_ling">inclusionAI Ling 3.0 124b（响应快）</string>
+    <string name="model_nemotron_super">NVIDIA Nemotron 3 Super 120b</string>
+    <string name="model_laguna">Poolside Laguna S 2.1 118b（编程专用）</string>
+    <string name="model_zen_mimo">Mimo V2.5 310b 多模态</string>
+    <string name="model_zen_ling">Ling 3.0 Flash 124b</string>
+    <string name="model_zen_deepseek">DeepSeek V4 Flash 284b</string>
+    <string name="model_zen_nemotron">Nemotron 3 Ultra 550b 多模态</string>
+    <string name="model_zen_north">North Mini Code 30b</string>
+    <string name="model_zen_laguna">Laguna S 2.1 118b</string>
+    <string name="kilo_model_tip_title">免费模型提示</string>
+    <string name="kilo_model_tip_message">可用免费模型会随提供商政策变化而变化，指定模型的选项可能会失效。建议采用自动路由分配可用模型，确保稳定可用。</string>
+    <string name="got_it">知道了</string>
+</resources>
