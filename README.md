@@ -1,4 +1,4 @@
-# 🚀 SAChat — 简单 AI 聊天
+# SAChat — 简单 AI 聊天
 
 > 一个轻量、开源、纯本地的 AI 聊天应用。你的数据，只属于你。
 
@@ -6,24 +6,24 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 ---
 
-## ✨ 功能特性
+## 功能特性
 
 | 分类 | 说明 |
 | --- | --- |
-| 🧠 多 API 支持 | 自定义 API 地址 / Key / 模型，可同时保存多条 API 配置随时切换 |
-| 🆓 免费模型预设 | 内置 OpenKilo、OpenCode Zen 等免费路由，免密钥开箱即用，支持自动路由 |
-| 🎭 角色扮演 | 创建自己的角色：头像、性格、场景、开场白、示例对话、系统提示词，让 AI 扮演任何你想扮演的人 |
-| 🌍 世界设定 | 关键词触发的 World Info 系统，为 AI 注入世界观与背景设定 |
-| 📇 Tavern Card | 支持导入 Tavern 角色卡（PNG 格式），社区角色直接拿来用 |
-| 💬 多对话管理 | 新建 / 切换 / 删除对话，清空重来，失败重试 |
-| 🖼️ 附件上传 | 支持文本文件与图片（自动压缩），多模态模型可直接看图 |
-| 📝 Markdown 渲染 | 对话内容完整渲染 Markdown，代码块、表格、列表清晰可读 |
-| 🎨 个性化设置 | 字号调节、背景图片/颜色、AI 昵称、系统提示词变量 `{{cur_date}}` 等 |
-| 🔒 完全本地 | 所有数据仅存于设备本地，无账号、无云同步、无数据收集 |
+| 多 API 支持 | 自定义 API 地址 / Key / 模型，可同时保存多条 API 配置随时切换 |
+| 免费模型预设 | 内置 OpenKilo、OpenCode Zen 等免费路由，免密钥开箱即用，支持自动路由 |
+| 角色扮演 | 创建自己的角色：头像、性格、场景、开场白、示例对话、系统提示词，让 AI 扮演任何你想扮演的人 |
+| 世界设定 | 关键词触发的 World Info 系统，为 AI 注入世界观与背景设定 |
+| Tavern Card | 支持导入 Tavern 角色卡（PNG 格式），社区角色直接拿来用 |
+| 多对话管理 | 新建 / 切换 / 删除对话，清空重来，失败重试 |
+| 附件上传 | 支持文本文件与图片（自动压缩），多模态模型可直接看图 |
+| Markdown 渲染 | 对话内容完整渲染 Markdown，代码块、表格、列表清晰可读 |
+| 个性化设置 | 字号调节、背景图片/颜色、AI 昵称、系统提示词变量 `{{cur_date}}` 等 |
+| 完全本地 | 所有数据仅存于设备本地，无账号、无云同步、无数据收集 |
 
 ---
 
-## 📦 下载
+## 下载
 
 前往 [Releases 页面](https://github.com/5h1iky/Simple-Ai-Chat/releases) 下载最新版 APK 安装包。
 
@@ -33,17 +33,17 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 ---
 
-## 🚦 快速开始
+## 快速开始
 
 1. 下载并安装 APK（首次安装需允许「未知来源」）
 2. 打开应用，在「设置」中选择：
    - **免费预设**：选择 OpenKilo / OpenCode Zen 等免费服务，选个模型（或自动路由），即可开聊
    - **自定义**：填入你自己的 API 地址、Key 和模型名称
-3. 回到聊天页，开始你的第一次对话吧 🎉
+3. 回到聊天页，开始你的第一次对话
 
 ---
 
-## 🔧 从源码构建
+## 从源码构建
 
 **环境要求：**
 
@@ -65,7 +65,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 ---
 
-## 📂 项目结构
+## 项目结构
 
 ```
 app/src/main/java/www/cetool/com/
@@ -79,7 +79,7 @@ app/src/main/java/www/cetool/com/
 
 ---
 
-## ⚠️ 免责声明
+## 免责声明
 
 - 本项目为个人开发者维护的开源公益项目，不收取任何费用，不提供商业担保或技术支持。
 - 「免费模型」功能依赖第三方服务商（如 OpenKilo、OpenCode Zen）提供的 API，对话内容将传输至所选第三方服务器，请谨慎输入隐私信息。
@@ -90,13 +90,13 @@ app/src/main/java/www/cetool/com/
 
 ---
 
-## 📚 技术栈
+## 技术栈
 
 Kotlin · AndroidX · Material Design · OkHttp + SSE · Gson · Markwon · Glide · ViewBinding
 
 ---
 
-## 👤 关于作者
+## 关于作者
 
 - 作者：5h1iky
 - 个人主页：[Bilibili](https://space.bilibili.com/432122433)
@@ -105,7 +105,7 @@ Kotlin · AndroidX · Material Design · OkHttp + SSE · Gson · Markwon · Glid
 
 ---
 
-## 📄 License
+## License
 
 本项目基于 [MIT License](./LICENSE) 开源，你可以自由使用、修改和分发，仅需保留版权声明。
 
