@@ -1,4 +1,4 @@
-<img width="1440" height="3200" alt="ef80ac36d82c6aeb8fab453571bff63b" src="https://github.com/user-attachments/assets/81a8e10b-caa8-4f51-8fde-38104c4ca71b" /># SAChat — AI聊天应用
+# SAChat — AI聊天应用
 
 >The README provides an English version, which can be found in the repository as[README.en.md](https://github.com/5h1iky/Simple-Ai-Chat/blob/main/README.en.md)— open it to view
 >
@@ -35,6 +35,8 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 <img width="360" height="800" alt="ef80ac36d82c6aeb8fab453571bff63b" src="https://github.com/user-attachments/assets/5e60ac4e-b7df-481f-8aea-16cad060ddcb" />
 
 <img width="360" height="800" alt="7bf15fcc74b4c6ad86d2ac1e97c628fd" src="https://github.com/user-attachments/assets/67f2bec2-4ec6-4107-b65b-7a0c22ce3b14" />
+
+>支持随系统深浅色模式变化而变化
 
 ---
 
