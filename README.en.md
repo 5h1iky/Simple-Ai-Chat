@@ -2,6 +2,8 @@
 
 > A lightweight, open-source, fully local AI chat app. Your data belongs to you only.
 
+---The English version of the README was translated using AI. The original version is in Chinese, so this translation may have some issues---
+
 SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-compatible endpoint, and also ships with several free model providers, so you can start chatting without a key. The app has no servers — all configurations, characters, world info and chat history are stored locally.
 
 ---
@@ -11,7 +13,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 | Category | Description |
 | --- | --- |
 | Multiple API support | Custom API URL / Key / Model; save multiple API entries and switch anytime |
-| Free model presets | Built-in free routers such as OpenKilo and OpenCode Zen, ready to use without a key, with auto-routing |
+| Free model presets | Built-in free routers , ready to use without a key |
 | Roleplay | Create your own characters: avatar, personality, scenario, first message, example dialogues and system prompts — let the AI play anyone you want |
 | World Info | Keyword-triggered World Info system to inject worldviews and background settings into the AI |
 | Tavern Card | Import Tavern character cards (PNG format) — use community characters directly |
