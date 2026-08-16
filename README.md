@@ -1,5 +1,6 @@
 # SAChat — AI聊天应用
 
+>The README provides an English version, which can be found in the repository as README.en.md — open it to view
 > 一个轻量、开源、纯本地的 AI 聊天应用。
 
 SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，内置了多个免费模型，无需密钥即可使用
