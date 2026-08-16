@@ -1,4 +1,4 @@
-# SAChat — AI聊天应用
+<img width="1440" height="3200" alt="ef80ac36d82c6aeb8fab453571bff63b" src="https://github.com/user-attachments/assets/81a8e10b-caa8-4f51-8fde-38104c4ca71b" /># SAChat — AI聊天应用
 
 >The README provides an English version, which can be found in the repository as[README.en.md](https://github.com/5h1iky/Simple-Ai-Chat/blob/main/README.en.md)— open it to view
 >
@@ -30,10 +30,11 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 ## 软件截图
 
-<img width="720" height="1600" alt="e29229d5579b3fc7dd3ab3c35d6669bc" src="https://github.com/user-attachments/assets/5ea5a096-b61b-4be2-b377-599c4cbf7107" />
+<img width="360" height="800" alt="e29229d5579b3fc7dd3ab3c35d6669bc" src="https://github.com/user-attachments/assets/5ea5a096-b61b-4be2-b377-599c4cbf7107" />  <img width="360" height="800" alt="49ef086f01ff331da15404006a2be6b8" src="https://github.com/user-attachments/assets/509a3d95-ad5c-47af-a119-2549f299d29d" />
 
-<img width="720" height="1600" alt="49ef086f01ff331da15404006a2be6b8" src="https://github.com/user-attachments/assets/509a3d95-ad5c-47af-a119-2549f299d29d" />
+<img width="360" height="800" alt="ef80ac36d82c6aeb8fab453571bff63b" src="https://github.com/user-attachments/assets/5e60ac4e-b7df-481f-8aea-16cad060ddcb" />
 
+<img width="360" height="800" alt="7bf15fcc74b4c6ad86d2ac1e97c628fd" src="https://github.com/user-attachments/assets/67f2bec2-4ec6-4107-b65b-7a0c22ce3b14" />
 
 ---
 
