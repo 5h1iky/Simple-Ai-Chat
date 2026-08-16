@@ -28,6 +28,16 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 ---
 
+## 软件截图
+
+<img width="720" height="1600" alt="e29229d5579b3fc7dd3ab3c35d6669bc" src="https://github.com/user-attachments/assets/5ea5a096-b61b-4be2-b377-599c4cbf7107" />
+
+<img width="720" height="1600" alt="49ef086f01ff331da15404006a2be6b8" src="https://github.com/user-attachments/assets/509a3d95-ad5c-47af-a119-2549f299d29d" />
+
+
+---
+
+
 ## 下载
 
 前往 [Releases 页面](https://github.com/5h1iky/Simple-Ai-Chat/releases) 下载最新版 APK 安装包。
