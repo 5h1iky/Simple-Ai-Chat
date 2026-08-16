@@ -1,6 +1,6 @@
 # SAChat — AI Chat App
 
-> The README provides an English version, which can be found in the repository as [README.en.md](https://github.com/5h1iky/Simple-Ai-Chat/blob/main/README.en.md) — open it to view
+---The English version of the README was translated using AI. The original version is in Chinese, so this translation may have some issues---
 
 > A lightweight, open-source, fully local AI chat app.
 
