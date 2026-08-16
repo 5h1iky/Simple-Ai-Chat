@@ -2,7 +2,7 @@
 
 > 一个轻量、开源、纯本地的 AI 聊天应用。
 
-SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，也内置了多个免费模型，无需密钥即可开聊。
+SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，内置了多个免费模型，无需密钥即可使用
 
 ---
 
@@ -10,16 +10,16 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 | 分类 | 说明 |
 | --- | --- |
-| 多 API 支持 | 自定义 API 地址 / Key / 模型，可同时保存多条 API 配置随时切换 |
-| 免费模型预设 | 内置 OpenKilo、OpenCode Zen 等免费路由，免密钥开箱即用，支持自动路由 |
-| 角色扮演 | 创建自己的角色：头像、性格、场景、开场白、示例对话、系统提示词，让 AI 扮演任何你想扮演的人 |
+| 自定义API | 同时保存多条 API 配置 |
+| 免费模型预设 | 内置 OpenKilo、OpenCode Zen  |
+| 角色扮演 | 创建自己的角色：头像、性格、场景、开场白、示例对话、系统提示词 |
 | 世界设定 | 关键词触发的 World Info 系统，为 AI 注入世界观与背景设定 |
-| Tavern Card | 支持导入 Tavern 角色卡（PNG 格式），社区角色直接拿来用 |
+| Tavern Card | 支持导入 TavernV2V3 角色卡（PNG 格式） |
 | 多对话管理 | 新建 / 切换 / 删除对话，清空重来，失败重试 |
-| 附件上传 | 支持文本文件与图片（自动压缩），多模态模型可直接看图 |
-| Markdown 渲染 | 对话内容完整渲染 Markdown，代码块、表格、列表清晰可读 |
-| 个性化设置 | 字号调节、背景图片/颜色、AI 昵称、系统提示词变量 `{{cur_date}}` 等 |
-| 完全本地 | 所有数据仅存于设备本地，无账号、无云同步、无数据收集 |
+| 附件上传 | 支持上传文本文件与图片（自动压缩） |
+| Markdown对话 | 对话内容渲染 Markdown |
+| 其他设置 | 字号调节、背景图片/颜色、AI 昵称头像、系统提示词变量 `{{cur_date}}` 等 |
+| 完全本地 | 所有数据存于设备本地 |
 
 ---
 
@@ -37,9 +37,9 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 1. 下载并安装 APK（首次安装需允许「未知来源」）
 2. 打开应用，在「设置」中选择：
-   - **免费预设**：选择 OpenKilo / OpenCode Zen 等免费服务，选个模型（或自动路由），即可开聊
+   - **免费预设**：选择 OpenKilo / OpenCode Zen 等免费服务，选个模型
    - **自定义**：填入你自己的 API 地址、Key 和模型名称
-3. 回到聊天页，开始你的第一次对话
+3. 回到聊天页开始对话
 
 ---
 
@@ -81,18 +81,13 @@ app/src/main/java/www/cetool/com/
 
 ## 免责声明
 
-- 本项目为个人开发者维护的开源公益项目，不收取任何费用，不提供商业担保或技术支持。
-- 「免费模型」功能依赖第三方服务商（如 OpenKilo、OpenCode Zen）提供的 API，对话内容将传输至所选第三方服务器，请谨慎输入隐私信息。
-- AI 生成内容可能存在错误或偏见，不代表开发者观点，使用者需自行承担后果。
-- 免费 API 不保证 7×24 小时可用，可能随时因服务商政策调整而中断。
-
 完整声明见应用内「关于 → 免责声明」。
 
 ---
 
 ## 技术栈
 
-Kotlin · AndroidX · Material Design · OkHttp + SSE · Gson · Markwon · Glide · ViewBinding
+Kotlin AndroidX aterial Design OkHttp SSE Gson Markwon Glide ViewBinding
 
 ---
 
