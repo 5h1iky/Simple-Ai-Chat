@@ -4,7 +4,8 @@ pluginManagement {
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/central' }
         maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        // 备用镜像（腾讯 nexus 本机不可达，已移除）
+        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -17,7 +18,8 @@ dependencyResolutionManagement {
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/central' }
         maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        // 备用镜像（腾讯 nexus 本机不可达，已移除）
+        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
         google()
         mavenCentral()
     }

@@ -35,6 +35,12 @@ android {
 
     buildFeatures {
         viewBinding true
+        compose true
+    }
+
+    // Compose 编译器版本：与 Kotlin 1.9.24 匹配的旧式编译器（版本已实测存在于阿里云/官方镜像）
+    composeOptions {
+        kotlinCompilerExtensionVersion = '1.5.14'
     }
 }
 
@@ -63,4 +69,16 @@ dependencies {
     // Glide for image loading
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     annotationProcessor 'com.github.bumptech.glide:compiler:4.16.0'
+
+    // ─── Jetpack Compose（版本已实测验证，见 UPGRADE_PLAN.md §7.3） ───
+    implementation platform('androidx.compose:compose-bom:2024.09.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.navigation:navigation-compose:2.8.5'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    // 图片加载（Compose 版）
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
 }
