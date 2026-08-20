@@ -188,10 +188,10 @@ object ConversationManager {
             charDefinition = conv.systemPrompt
         }
 
-        // 世界书多源：会话绑定（Chat Lore）+ 角色卡内嵌（Character Lore）
+        // 世界书多源：会话绑定（可多本，Chat Lore）+ 角色卡内嵌（Character Lore）
         val worldSources = mutableListOf<www.cetool.com.model.WorldInfo>()
-        if (conv.worldInfoId != null) {
-            WorldInfoManager.load(appContext, conv.worldInfoId!!)?.let { worldSources.add(it) }
+        for (wid in conv.boundWorldIds()) {
+            WorldInfoManager.load(appContext, wid)?.let { worldSources.add(it) }
         }
         if (characterLoreId != null) {
             WorldInfoManager.load(appContext, characterLoreId!!)?.let { worldSources.add(it) }
@@ -364,6 +364,7 @@ object ConversationManager {
                         id = conv.id, title = conv.title, systemPrompt = conv.systemPrompt,
                         createdAt = conv.createdAt, updatedAt = conv.updatedAt,
                         isStreaming = conv.isStreaming, characterId = conv.characterId, worldInfoId = conv.worldInfoId,
+                        worldInfoIds = conv.worldInfoIds,
                         isArchived = conv.isArchived,
                         adventureRoleIds = conv.adventureRoleIds,
                         messages = conv.messages.map { msg ->
@@ -402,6 +403,7 @@ object ConversationManager {
                     id = entry.id, title = entry.title, systemPrompt = entry.systemPrompt,
                     createdAt = entry.createdAt, updatedAt = entry.updatedAt,
                     isStreaming = false, characterId = entry.characterId, worldInfoId = entry.worldInfoId,
+                    worldInfoIds = entry.worldInfoIds ?: emptyList(),
                     isArchived = entry.isArchived ?: false,
                     adventureRoleIds = entry.adventureRoleIds ?: emptyList(),
                     messages = entry.messages.map { msg ->
@@ -458,6 +460,7 @@ object ConversationManager {
         val createdAt: Long, val updatedAt: Long, val isStreaming: Boolean,
         val characterId: String? = null,
         val worldInfoId: String? = null,
+        val worldInfoIds: List<String>? = null,
         val isArchived: Boolean? = null,
         val adventureRoleIds: List<String>? = null,
         val messages: List<MessageEntry>

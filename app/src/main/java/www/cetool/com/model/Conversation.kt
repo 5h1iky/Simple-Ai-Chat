@@ -15,12 +15,28 @@ data class Conversation(
     var updatedAt: Long = System.currentTimeMillis(),
     var isStreaming: Boolean = false,
     var characterId: String? = null,
+    /** 兼容旧数据的单本世界书字段（新代码统一用 worldInfoIds） */
     var worldInfoId: String? = null,
+    /** 绑定的世界书 id 列表：支持同时启用多本世界书 */
+    var worldInfoIds: List<String> = emptyList(),
     /** 记忆已封存：会话锁定，不可继续发送（对应 MuseAI 的 isSessionArchived） */
     var isArchived: Boolean = false,
     /** 文字冒险（跑团）：绑定的多个角色卡 id（非空即冒险模式） */
     var adventureRoleIds: List<String> = emptyList()
 ) {
+    /** 当前绑定的世界书 id 列表（worldInfoIds 优先，兼容旧数据 worldInfoId） */
+    fun boundWorldIds(): List<String> {
+        val ids = worldInfoIds.filter { it.isNotBlank() }
+        return if (ids.isNotEmpty()) ids
+        else listOfNotNull(worldInfoId?.takeIf { it.isNotBlank() })
+    }
+
+    /** 统一写入绑定世界书：同步维护多本列表与兼容字段 */
+    fun setBoundWorlds(ids: List<String>) {
+        worldInfoIds = ids.distinct().filter { it.isNotBlank() }
+        worldInfoId = worldInfoIds.firstOrNull()
+    }
+
     companion object {
         const val DEFAULT_TITLE = "新对话"
         const val MAX_HISTORY = 20

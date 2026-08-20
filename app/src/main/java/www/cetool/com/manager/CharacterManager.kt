@@ -46,6 +46,12 @@ object CharacterManager {
         } catch (_: Exception) { null }
     }
 
+    /** 读取角色卡原始 JSON（导出用） */
+    fun rawJson(context: Context, characterId: String): String? {
+        val file = File(getDir(context), "$characterId.json")
+        return if (file.exists()) try { file.readText() } catch (_: Exception) { null } else null
+    }
+
     fun save(context: Context, json: String): String? {
         val card = TavernCardImporter.parse(json).getOrNull() ?: return null
         val id = UUID.randomUUID().toString().take(8)

@@ -8,3 +8,8 @@
 externalNativeBuild
 /classes.jar
 *.apk
+# 发布签名（仅本机构建使用，不入库）
+/keystore/
+keystore.properties
+# 内部升级方案记录（不随仓库分发）
+UPGRADE_PLAN.md

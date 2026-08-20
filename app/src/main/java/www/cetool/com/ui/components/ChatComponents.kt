@@ -41,6 +41,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.graphics.BitmapFactory
 import android.util.Base64
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import io.noties.markwon.Markwon
 import www.cetool.com.model.Message
 import www.cetool.com.ui.theme.SAChatTheme
@@ -80,12 +87,13 @@ fun MessageList(
     fontSize: Int,
     systemPromptPreview: String,
     bindingCharacterName: String?,
-    bindingWorldName: String?,
+    bindingWorldNames: List<String>,
     scrollTarget: Int?,
     onClearScrollTarget: () -> Unit,
     onCharacterBindingClick: () -> Unit,
     onWorldBindingClick: () -> Unit,
-    onCardClick: (String) -> Unit
+    onCardClick: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
 
@@ -104,10 +112,10 @@ fun MessageList(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier) {
         BindingBar(
             characterName = bindingCharacterName,
-            worldName = bindingWorldName,
+            worldNames = bindingWorldNames,
             onCharacterClick = onCharacterBindingClick,
             onWorldClick = onWorldBindingClick
         )
@@ -145,11 +153,11 @@ fun MessageList(
 @Composable
 private fun BindingBar(
     characterName: String?,
-    worldName: String?,
+    worldNames: List<String>,
     onCharacterClick: () -> Unit,
     onWorldClick: () -> Unit
 ) {
-    if (characterName == null && worldName == null) return
+    if (characterName == null && worldNames.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -157,29 +165,49 @@ private fun BindingBar(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         if (characterName != null) {
-            BindingChip(text = "👤 $characterName", onClick = onCharacterClick)
+            BindingChip(
+                icon = Icons.Filled.Person,
+                text = characterName,
+                onClick = onCharacterClick
+            )
         }
-        if (worldName != null) {
-            BindingChip(text = "📖 $worldName", onClick = onWorldClick)
+        // 多本世界书：每本一个提示 chip
+        worldNames.forEach { name ->
+            BindingChip(
+                icon = Icons.Filled.MenuBook,
+                text = name,
+                onClick = onWorldClick
+            )
         }
     }
 }
 
 @Composable
-private fun BindingChip(text: String, onClick: () -> Unit) {
+private fun BindingChip(icon: ImageVector, text: String, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -332,12 +360,23 @@ private fun ChatBubble(
                                         .padding(top = 6.dp)
                                         .clickable { onCardClick(block.cardId) }
                                 ) {
-                                    Text(
-                                        text = "📇 角色卡 ${block.cardId}（点击查看）",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = textColor,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Badge,
+                                            contentDescription = null,
+                                            tint = textColor,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "角色卡（点击查看）",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = textColor
+                                        )
+                                    }
                                 }
                             }
                         }

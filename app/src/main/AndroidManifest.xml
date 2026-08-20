@@ -38,11 +38,6 @@
             android:exported="false"
             android:theme="@style/Theme.CRtools" />
 
-        <activity
-            android:name=".CreateWorldInfoActivity"
-            android:exported="false"
-            android:theme="@style/Theme.CRtools" />
-
         <!-- Compose 页面（1.1 角色卡） -->
         <activity
             android:name=".CharacterListActivity"

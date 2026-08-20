@@ -8,7 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import www.cetool.com.importer.WorldInfoImporter
@@ -61,26 +64,58 @@ import www.cetool.com.ui.theme.SAChatTheme
 class WorldInfoListActivity : ComponentActivity() {
 
     private var isManageMode = false
-    private var refreshTick = 0
+    // Compose 可观察刷新计数（修复：remember 快照导致编辑返回后列表不刷新）
+    private val refreshTick = mutableIntStateOf(0)
+    private var exportPendingJson: String? = null
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == RESULT_OK) refreshTick++
+        if (it.resultCode == RESULT_OK) refreshTick.intValue++
     }
 
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) handleImport(uri)
     }
 
+    /** 导出：打开系统文件管理器让用户选择保存位置 */
+    private val exportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        val json = exportPendingJson
+        exportPendingJson = null
+        if (uri != null && json != null) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                Toast.makeText(this, "世界书已导出", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun onExport(worldInfoId: String, name: String) {
+        val json = WorldInfoManager.rawJson(this, worldInfoId)
+        if (json == null) {
+            Toast.makeText(this, "导出失败：无法读取世界书", Toast.LENGTH_SHORT).show()
+            return
+        }
+        exportPendingJson = json
+        exportLauncher.launch("${sanitizeFileName(name)}.json")
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "worldinfo" }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         isManageMode = intent.getBooleanExtra("manage_mode", false)
+        ConversationManager.init(this)
 
         setContent {
             SAChatTheme {
-                var tick by remember { mutableIntStateOf(refreshTick) }
                 WorldInfoListScreen(
                     loadWorldInfos = { WorldInfoManager.list(this) },
-                    tick = tick,
+                    tick = refreshTick.intValue,
                     onBack = { finish() },
                     onPick = { id ->
                         if (isManageMode) {
@@ -94,8 +129,9 @@ class WorldInfoListActivity : ComponentActivity() {
                     onDelete = { id ->
                         WorldInfoManager.delete(this, id)
                         Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
-                        tick++
+                        refreshTick.intValue++
                     },
+                    onExport = { info -> onExport(info.id, info.name) },
                     onNew = { openEditor(null) },
                     onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                     isManageMode = isManageMode
@@ -119,7 +155,7 @@ class WorldInfoListActivity : ComponentActivity() {
                     WorldInfoManager.saveNew(this, result.info)
                     val warnText = if (result.warnings.isNotEmpty()) "（${result.warnings.size} 条警告）" else ""
                     Toast.makeText(this, "世界书「${result.info.name}」已导入$warnText", Toast.LENGTH_SHORT).show()
-                    refreshTick++
+                    refreshTick.intValue++
                     if (!isManageMode) {
                         setResult(RESULT_OK, Intent().putExtra("world_info_id", result.info.id))
                         finish()
@@ -135,7 +171,7 @@ class WorldInfoListActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun WorldInfoListScreen(
     loadWorldInfos: () -> List<WorldInfoSummary>,
@@ -144,11 +180,22 @@ private fun WorldInfoListScreen(
     onPick: (String) -> Unit,
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onExport: (WorldInfoSummary) -> Unit,
     onNew: () -> Unit,
     onImport: () -> Unit,
     isManageMode: Boolean
 ) {
     val worldInfos = remember(tick) { loadWorldInfos() }
+    // 各世界书被哪些对话启用（长按对话 → 世界书设置 可自由配置，支持多本）
+    val convTitlesByWorld = remember(tick) {
+        val map = mutableMapOf<String, MutableList<String>>()
+        ConversationManager.all.forEach { conv ->
+            conv.boundWorldIds().forEach { wid ->
+                map.getOrPut(wid) { mutableListOf() }.add(conv.title)
+            }
+        }
+        map.mapValues { it.value.toList() }
+    }
     var pendingDelete by remember { mutableStateOf<WorldInfoSummary?>(null) }
 
     Scaffold(
@@ -190,7 +237,11 @@ private fun WorldInfoListScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(info.id) },
+                            .combinedClickable(
+                                onClick = { onPick(info.id) },
+                                onLongClick = { pendingDelete = info }
+                            )
+                            .clip(RoundedCornerShape(16.dp)),
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface,
                         tonalElevation = 1.dp
@@ -204,14 +255,11 @@ private fun WorldInfoListScreen(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
                                 )
+                                // 世界书不在本页启用：提示用户在对话侧（长按对话 → 世界书设置）启用
                                 Text(
-                                    text = if (info.enabled) "● 启用" else "○ 停用",
+                                    text = "长按对话启用",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (info.enabled) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
@@ -219,6 +267,24 @@ private fun WorldInfoListScreen(
                                 text = "${info.entryCount} 条目",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            // 提示启用它的对话（长按左侧对话 → 世界书设置），一本世界书也显示
+                            Spacer(Modifier.height(4.dp))
+                            val titles = convTitlesByWorld[info.id] ?: emptyList()
+                            Text(
+                                text = if (titles.isEmpty()) {
+                                    "暂无对话启用"
+                                } else {
+                                    "启用对话：${titles.joinToString("、")}"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (titles.isEmpty()) {
+                                    MaterialTheme.colorScheme.outline
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                },
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                             if (info.description.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
@@ -247,6 +313,11 @@ private fun WorldInfoListScreen(
                         onEdit(info.id)
                         pendingDelete = null
                     }) { Text("编辑世界书") }
+                    HorizontalDivider()
+                    TextButton(onClick = {
+                        onExport(info)
+                        pendingDelete = null
+                    }) { Text("导出世界书") }
                     HorizontalDivider()
                     TextButton(onClick = {
                         onDelete(info.id)

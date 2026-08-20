@@ -70,3 +70,13 @@ val BubbleUser = Color(0xFF006487)
 val BubbleUserText = Color(0xFFFFFFFF)
 val BubbleAi = Color(0xFFDCE3E9)
 val BubbleAiText = Color(0xFF191C1E)
+
+// ─── 启动页（与 colors.xml 的 splash_* 一致） ───
+
+val SplashBackground = Color(0xFF001E2E)
+val SplashText = Color(0xFF6DD1FF)
+
+// ─── 渐变（新 UI：主色 → 亮青） ───
+
+val PrimaryGradientStart = Color(0xFF006487)
+val PrimaryGradientEnd = Color(0xFF2A9FD8)

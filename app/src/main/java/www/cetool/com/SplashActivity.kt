@@ -3,82 +3,131 @@ package www.cetool.com
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import www.cetool.com.model.ApiConfig
+import www.cetool.com.ui.theme.SAChatTheme
+import www.cetool.com.ui.theme.SplashBackground
+import www.cetool.com.ui.theme.SplashText
 
-class SplashActivity : AppCompatActivity() {
-
-    private lateinit var tvSplash: TextView
+/**
+ * 启动页（Compose 版）
+ * 视觉与旧版一致：纯色背景 + 居中等宽字体打字机动画；
+ * 仅提速：原约 6.6s → 约 3.3s（减少闪烁次数与各段停顿，动画序列不变）。
+ */
+class SplashActivity : ComponentActivity() {
 
     private val brandText = "Simple AI Chat"
     private val initText = "正在初始化环境..."
-    private val typeSpeed = 80L
-    private val deleteSpeed = 50L
-    private val holdAfterTyping = 600L
-    private val holdAfterDelete = 400L
-    private val holdAfterInit = 1200L
-    private val blinkCount = 4
+    // 提速参数（原 80/50ms、闪烁 4 次、停留 600/400/1200ms）
+    private val typeSpeed = 45L
+    private val deleteSpeed = 40L
+    private val holdAfterTyping = 300L
+    private val holdAfterDelete = 200L
+    private val holdAfterInit = 500L
+    private val blinkCount = 2
+    private val blinkInterval = 150L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_splash)
-        tvSplash = findViewById(R.id.tvSplashText)
+        setContent {
+            SAChatTheme {
+                var text by remember { mutableStateOf("") }
+                var showCrash by remember { mutableStateOf(false) }
+                val crashLog = remember { CrashReporter.getCrashLog(this@SplashActivity) }
 
-        val crashLog = CrashReporter.getCrashLog(this)
-        if (crashLog != null) {
-            CrashReporter.clearCrashLog(this)
-            showCrashDialog(crashLog)
-        } else {
-            lifecycleScope.launch { playAnimation() }
+                LaunchedEffect(Unit) {
+                    if (crashLog != null) {
+                        CrashReporter.clearCrashLog(this@SplashActivity)
+                        showCrash = true
+                    } else {
+                        playAnimation { text = it }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(SplashBackground),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = text,
+                        color = SplashText,
+                        fontSize = 28.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                if (showCrash) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("上次使用出现问题") },
+                        text = { Text("软件上次运行时出现了异常。你可以复制详细信息发给我，我来修复。") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                CrashReporter.copyAndReport(this@SplashActivity, crashLog ?: "")
+                                showCrash = false
+                                lifecycleScope.launch { playAnimation { text = it } }
+                            }) { Text("复制并反馈") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showCrash = false
+                                lifecycleScope.launch { playAnimation { text = it } }
+                            }) { Text("忽略") }
+                        }
+                    )
+                }
+            }
         }
     }
 
-    private fun showCrashDialog(crashLog: String) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("上次使用出现问题")
-            .setMessage("软件上次运行时出现了异常。你可以复制详细信息发给我，我来修复。")
-            .setPositiveButton("复制并反馈") { _, _ ->
-                CrashReporter.copyAndReport(this, crashLog)
-                lifecycleScope.launch { playAnimation() }
-            }
-            .setNegativeButton("忽略") { _, _ ->
-                lifecycleScope.launch { playAnimation() }
-            }
-            .setCancelable(false)
-            .show()
-    }
-
-    private suspend fun playAnimation() {
+    /** 打字机动画序列（与旧版一致：打字 → 光标闪烁 → 删除 → 初始化 → 跳转） */
+    private suspend fun playAnimation(onText: (String) -> Unit) {
         for (i in 1..brandText.length) {
-            tvSplash.text = brandText.substring(0, i)
+            onText(brandText.substring(0, i))
             delay(typeSpeed)
         }
 
-        tvSplash.text = "${brandText}_"
+        onText("${brandText}_")
         delay(holdAfterTyping)
 
         for (i in 0 until blinkCount) {
-            tvSplash.text = brandText
-            delay(200)
-            tvSplash.text = "${brandText}_"
-            delay(200)
+            onText(brandText)
+            delay(blinkInterval)
+            onText("${brandText}_")
+            delay(blinkInterval)
         }
 
         for (i in brandText.length downTo 1) {
-            tvSplash.text = brandText.substring(0, i)
+            onText(brandText.substring(0, i))
             delay(deleteSpeed)
         }
-        tvSplash.text = ""
+        onText("")
 
         delay(holdAfterDelete)
 
         for (i in 1..initText.length) {
-            tvSplash.text = initText.substring(0, i)
+            onText(initText.substring(0, i))
             delay(typeSpeed)
         }
 

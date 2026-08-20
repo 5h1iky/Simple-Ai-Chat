@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +51,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import www.cetool.com.manager.WorldInfoManager
 import www.cetool.com.model.WorldEntry
 import www.cetool.com.model.WorldInfo
@@ -100,11 +106,9 @@ class WorldInfoEditActivity : ComponentActivity() {
                 WorldInfoEditScreen(
                     name = name,
                     description = description,
-                    enabled = enabled,
                     entries = entries,
                     onNameChange = { name = it },
                     onDescriptionChange = { description = it },
-                    onEnabledChange = { enabled = it },
                     onAddEntry = { entries.add(WorldEntry(id = UUID.randomUUID().toString().take(8))) },
                     onUpdateEntry = { index, entry -> if (index in entries.indices) entries[index] = entry },
                     onDeleteEntry = { index -> if (index in entries.indices) entries.removeAt(index) },
@@ -114,6 +118,7 @@ class WorldInfoEditActivity : ComponentActivity() {
                             id = editId ?: UUID.randomUUID().toString().take(8),
                             name = name.trim(),
                             description = description.trim(),
+                            // 启用状态由对话侧（长按对话 → 世界书设置）控制，编辑页不再提供开关
                             enabled = enabled,
                             entries = entries.toMutableList()
                         )
@@ -141,11 +146,9 @@ class WorldInfoEditActivity : ComponentActivity() {
 private fun WorldInfoEditScreen(
     name: String,
     description: String,
-    enabled: Boolean,
     entries: List<WorldEntry>,
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
-    onEnabledChange: (Boolean) -> Unit,
     onAddEntry: () -> Unit,
     onUpdateEntry: (Int, WorldEntry) -> Unit,
     onDeleteEntry: (Int) -> Unit,
@@ -191,11 +194,6 @@ private fun WorldInfoEditScreen(
                     label = { Text("描述") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("启用", modifier = Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
-                }
             }
 
             FoldableSection(
@@ -291,7 +289,7 @@ private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () ->
     }
 }
 
-/** 全屏条目编辑（字段太多，用对话框全屏化承载） */
+/** 全屏条目编辑（字段太多，用全屏 Dialog 承载，内容区固定可滚动） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EntryEditDialog(
@@ -318,101 +316,131 @@ private fun EntryEditDialog(
     var useProbability by remember { mutableStateOf(entry.useProbability) }
     var showPositionPicker by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    fun save() {
+        onSave(
+            entry.copy(
+                name = name.trim().ifBlank { "未命名条目" },
+                keywords = splitKeywords(keywords),
+                secondaryKeys = splitKeywords(secondaryKeys),
+                content = content,
+                position = position,
+                injectDepth = injectDepth.toIntOrNull() ?: 4,
+                priority = priority.toIntOrNull() ?: 1000,
+                probability = probability.toIntOrNull() ?: 100,
+                scanDepth = scanDepth.toIntOrNull() ?: 4,
+                role = roleFilter.trim().ifBlank { null },
+                groupName = groupName.trim(),
+                constantActive = constantActive,
+                useRegex = useRegex,
+                caseSensitive = caseSensitive,
+                wholeWords = wholeWords,
+                selective = selective,
+                useProbability = useProbability
+            )
+        )
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑条目") },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
             Column(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .height(520.dp)
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
             ) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = keywords, onValueChange = { keywords = it }, label = { Text("关键词（逗号分隔，/.../ 视为正则）") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = secondaryKeys, onValueChange = { secondaryKeys = it }, label = { Text("次级关键词（可选过滤）") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("内容") }, minLines = 4, modifier = Modifier.fillMaxWidth())
-
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("注入位置", modifier = Modifier.weight(1f))
-                    TextButton(onClick = { showPositionPicker = true }) {
-                        Text(positionLabel(position))
-                    }
-                }
-                if (showPositionPicker) {
-                    AlertDialog(
-                        onDismissRequest = { showPositionPicker = false },
-                        title = { Text("选择注入位置") },
-                        text = {
-                            Column {
-                                POSITION_OPTIONS.forEach { (value, label) ->
-                                    TextButton(onClick = {
-                                        position = value
-                                        showPositionPicker = false
-                                    }) { Text(label) }
-                                }
-                            }
-                        },
-                        confirmButton = {}
+                // 顶栏：取消 / 标题 / 保存
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    Text(
+                        text = "编辑条目",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
+                    TextButton(onClick = { save() }) { Text("保存") }
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = priority, onValueChange = { priority = it }, label = { Text("优先级(Order)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = probability, onValueChange = { probability = it }, label = { Text("概率%") }, modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = injectDepth, onValueChange = { injectDepth = it }, label = { Text("注入深度") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = scanDepth, onValueChange = { scanDepth = it }, label = { Text("扫描深度") }, modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text("角色过滤(user/assistant)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text("包含组") }, modifier = Modifier.weight(1f))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ToggleLabel("常驻", constantActive, { constantActive = it }, Modifier.weight(1f))
-                    ToggleLabel("正则", useRegex, { useRegex = it }, Modifier.weight(1f))
-                    ToggleLabel("大小写", caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ToggleLabel("整词匹配", wholeWords, { wholeWords = it }, Modifier.weight(1f))
-                    ToggleLabel("次级过滤", selective, { selective = it }, Modifier.weight(1f))
-                    ToggleLabel("启用概率", useProbability, { useProbability = it }, Modifier.weight(1f))
+                // 内容区：固定剩余高度，内部滚动
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = keywords, onValueChange = { keywords = it }, label = { Text("关键词（逗号分隔，/.../ 视为正则）") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = secondaryKeys, onValueChange = { secondaryKeys = it }, label = { Text("次级关键词（可选过滤）") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("内容") }, minLines = 4, modifier = Modifier.fillMaxWidth())
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("注入位置", modifier = Modifier.weight(1f))
+                        TextButton(onClick = { showPositionPicker = true }) {
+                            Text(positionLabel(position))
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = priority, onValueChange = { priority = it }, label = { Text("优先级(Order)") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = probability, onValueChange = { probability = it }, label = { Text("概率%") }, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = injectDepth, onValueChange = { injectDepth = it }, label = { Text("注入深度") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = scanDepth, onValueChange = { scanDepth = it }, label = { Text("扫描深度") }, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text("角色过滤(user/assistant)") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text("包含组") }, modifier = Modifier.weight(1f))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ToggleLabel("常驻", constantActive, { constantActive = it }, Modifier.weight(1f))
+                        ToggleLabel("正则", useRegex, { useRegex = it }, Modifier.weight(1f))
+                        ToggleLabel("大小写", caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ToggleLabel("整词匹配", wholeWords, { wholeWords = it }, Modifier.weight(1f))
+                        ToggleLabel("次级过滤", selective, { selective = it }, Modifier.weight(1f))
+                        ToggleLabel("启用概率", useProbability, { useProbability = it }, Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onSave(
-                    entry.copy(
-                        name = name.trim().ifBlank { "未命名条目" },
-                        keywords = splitKeywords(keywords),
-                        secondaryKeys = splitKeywords(secondaryKeys),
-                        content = content,
-                        position = position,
-                        injectDepth = injectDepth.toIntOrNull() ?: 4,
-                        priority = priority.toIntOrNull() ?: 1000,
-                        probability = probability.toIntOrNull() ?: 100,
-                        scanDepth = scanDepth.toIntOrNull() ?: 4,
-                        role = roleFilter.trim().ifBlank { null },
-                        groupName = groupName.trim(),
-                        constantActive = constantActive,
-                        useRegex = useRegex,
-                        caseSensitive = caseSensitive,
-                        wholeWords = wholeWords,
-                        selective = selective,
-                        useProbability = useProbability
-                    )
-                )
-            }) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
         }
-    )
+    }
+
+    // 注入位置选择（叠在全屏 Dialog 之上的常规弹窗）
+    if (showPositionPicker) {
+        AlertDialog(
+            onDismissRequest = { showPositionPicker = false },
+            title = { Text("选择注入位置") },
+            text = {
+                Column {
+                    POSITION_OPTIONS.forEach { (value, label) ->
+                        TextButton(onClick = {
+                            position = value
+                            showPositionPicker = false
+                        }) { Text(label) }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
 }
 
 @Composable

@@ -9,8 +9,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -66,6 +69,7 @@ import www.cetool.com.importer.TavernCardImporter
 class CharacterListActivity : ComponentActivity() {
 
     private var isManageMode = false
+    private var exportPendingJson: String? = null
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -75,6 +79,36 @@ class CharacterListActivity : ComponentActivity() {
 
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) handleImport(uri)
+    }
+
+    /** 导出：打开系统文件管理器让用户选择保存位置 */
+    private val exportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        val json = exportPendingJson
+        exportPendingJson = null
+        if (uri != null && json != null) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                Toast.makeText(this, "角色卡已导出", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun onExport(characterId: String, name: String) {
+        val json = CharacterManager.rawJson(this, characterId)
+        if (json == null) {
+            Toast.makeText(this, "导出失败：无法读取角色卡", Toast.LENGTH_SHORT).show()
+            return
+        }
+        exportPendingJson = json
+        exportLauncher.launch("${sanitizeFileName(name)}.json")
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "character" }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +133,7 @@ class CharacterListActivity : ComponentActivity() {
                         CharacterManager.delete(this, id)
                         Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
                     },
+                    onExport = { char -> onExport(char.id, char.name) },
                     onNew = { openEditor(null) },
                     onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                     isManageMode = isManageMode
@@ -157,6 +192,7 @@ private fun CharacterListScreen(
     onPick: (String) -> Unit,
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onExport: (CharacterInfo) -> Unit,
     onNew: () -> Unit,
     onImport: () -> Unit,
     isManageMode: Boolean
@@ -227,6 +263,11 @@ private fun CharacterListScreen(
                     }) { Text("编辑角色卡") }
                     HorizontalDivider()
                     TextButton(onClick = {
+                        onExport(char)
+                        pendingDelete = null
+                    }) { Text("导出角色卡") }
+                    HorizontalDivider()
+                    TextButton(onClick = {
                         onDelete(char.id)
                         pendingDelete = null
                         CharacterListActivity.bumpRefresh()
@@ -241,6 +282,7 @@ private fun CharacterListScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CharacterCard(
     char: CharacterInfo,
@@ -250,7 +292,7 @@ private fun CharacterCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .clip(RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -321,9 +363,11 @@ fun CharacterAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "🎭",
-                        style = MaterialTheme.typography.titleMedium
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "头像",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }

@@ -7,74 +7,114 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
-import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.Spinner
-import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import androidx.core.content.edit
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import www.cetool.com.manager.WorldInfoEngine
 import www.cetool.com.model.ApiConfig
+import www.cetool.com.model.Conversation
+import www.cetool.com.ui.theme.SAChatTheme
 import java.io.ByteArrayOutputStream
 
-class SettingsActivity : AppCompatActivity() {
+/**
+ * 设置页（Compose 版）
+ * 分组卡片布局：API 配置 / 免费模型 / 字体大小 / 提示词管理 / 联网搜索 / 背景图片 / 聊天昵称。
+ * 业务逻辑与旧版一致（仅 UI 层迁移，SharedPreferences 字段名不变）。
+ */
+class SettingsActivity : ComponentActivity() {
 
     private val gson = Gson()
-    private val apiEntries = mutableListOf<SettingsKeys.ApiEntry>()
-    private var activeApiIndex = 0
 
-    // Free Gateway Integration: 预设服务商相关状态
-    private lateinit var spinnerProvider: Spinner
-    private lateinit var tvProviderHint: TextView
-    private lateinit var btnSelectModel: MaterialButton
-    private var providerMode = SettingsKeys.PROVIDER_CUSTOM
-    private var kiloModelOption = SettingsKeys.KILO_MODEL
-    private var zenModelOption = SettingsKeys.ZEN_MODEL_DEFAULT
+    // ─── UI 状态（Compose 可观察） ───
+    private val apiEntries = mutableStateListOf<SettingsKeys.ApiEntry>()
+    private var activeApiIndex by mutableIntStateOf(0)
+
+    // Free Gateway: 预设服务商
+    private var providerMode by mutableStateOf(SettingsKeys.PROVIDER_CUSTOM)
+    private var kiloModelOption by mutableStateOf(SettingsKeys.KILO_MODEL)
+    private var zenModelOption by mutableStateOf(SettingsKeys.ZEN_MODEL_DEFAULT)
     private var manualEntriesSnapshot: List<SettingsKeys.ApiEntry>? = null
     private var manualActiveIndexSnapshot = 0
     private var autoCreatedByPreset = false
 
-    private lateinit var containerApiList: LinearLayout
-    private lateinit var btnAddApi: MaterialButton
-    private lateinit var etFontSize: TextInputEditText
-    private lateinit var tvFontPreview: TextView
-    private lateinit var etSystemPrompt: TextInputEditText
-    private lateinit var etMaxHistory: TextInputEditText
-    private lateinit var etWorldBudget: TextInputEditText
-    private lateinit var etWebSearchUrl: TextInputEditText
-    private lateinit var rgBgMode: RadioGroup
-    private lateinit var rbBgColor: RadioButton
-    private lateinit var rbBgImage: RadioButton
-    private lateinit var layoutBgImage: View
-    private lateinit var btnPickBgImage: MaterialButton
-    private lateinit var tvBgImageName: TextView
-    private lateinit var rgBgScale: RadioGroup
-    private lateinit var rbBgFit: RadioButton
-    private lateinit var rbBgFill: RadioButton
-    private lateinit var btnSave: MaterialButton
-    private lateinit var etUserName: TextInputEditText
-    private lateinit var etAiName: TextInputEditText
-    private lateinit var btnPickUserAvatar: MaterialButton
-    private lateinit var btnPickAiAvatar: MaterialButton
-    private var userAvatarBase64: String? = null
-    private var aiAvatarBase64: String? = null
+    // 输入字段
+    private var fontSizeText by mutableStateOf("15")
+    private var systemPromptText by mutableStateOf("")
+    private var maxHistoryText by mutableStateOf("20")
+    private var worldBudgetText by mutableStateOf("1500")
+    private var webSearchUrlText by mutableStateOf("")
 
-    private var bgImageBase64: String? = null
-    private var bgImageName: String? = null
+    // 背景
+    private var bgMode by mutableStateOf("color")
+    private var bgScale by mutableStateOf("fit")
+    private var bgImageBase64 by mutableStateOf<String?>(null)
+    private var bgImageName by mutableStateOf<String?>(null)
+
+    // 昵称与头像
+    private var userNameText by mutableStateOf("用户")
+    private var aiNameText by mutableStateOf("AI")
+    private var userAvatarBase64 by mutableStateOf<String?>(null)
+    private var aiAvatarBase64 by mutableStateOf<String?>(null)
+
+    // 对话框状态
+    private var showApiDialog by mutableStateOf(false)
+    private var apiDialogIndex by mutableStateOf<Int?>(null)
+    private var showModelOptions by mutableStateOf(false)
+    private var showModelTip by mutableStateOf(false)
+    private var showProviderSelect by mutableStateOf(false)
 
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -96,49 +136,18 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_settings)
-
-        containerApiList = findViewById(R.id.containerApiList)
-        btnAddApi = findViewById(R.id.btnAddApi)
-        // Free Gateway Integration
-        spinnerProvider = findViewById(R.id.spinnerProvider)
-        tvProviderHint = findViewById(R.id.tvProviderHint)
-        btnSelectModel = findViewById(R.id.btnSelectModel)
-        etFontSize = findViewById(R.id.etFontSize)
-        tvFontPreview = findViewById(R.id.tvFontPreview)
-        etSystemPrompt = findViewById(R.id.etSystemPrompt)
-        etMaxHistory = findViewById(R.id.etMaxHistory)
-        etWorldBudget = findViewById(R.id.etWorldBudget)
-        etWebSearchUrl = findViewById(R.id.etWebSearchUrl)
-        rgBgMode = findViewById(R.id.rgBgMode)
-        rbBgColor = findViewById(R.id.rbBgColor)
-        rbBgImage = findViewById(R.id.rbBgImage)
-        layoutBgImage = findViewById(R.id.layoutBgImage)
-        btnPickBgImage = findViewById(R.id.btnPickBgImage)
-        tvBgImageName = findViewById(R.id.tvBgImageName)
-        rgBgScale = findViewById(R.id.rgBgScale)
-        rbBgFit = findViewById(R.id.rbBgFit)
-        rbBgFill = findViewById(R.id.rbBgFill)
-        btnSave = findViewById(R.id.btnSave)
-        etUserName = findViewById(R.id.etUserName)
-        etAiName = findViewById(R.id.etAiName)
-        btnPickUserAvatar = findViewById(R.id.btnPickUserAvatar)
-        btnPickAiAvatar = findViewById(R.id.btnPickAiAvatar)
-
-        setupBgModeToggle()
         ConversationManager.init(this)
         loadSettings()
-        setupProviderSpinner()
-        renderApiList()
+        loadProviderMode()
 
-        etFontSize.setOnKeyListener { _, _, _ -> updateFontPreview(); false }
-        btnAddApi.setOnClickListener { showApiEntryDialog(null) }
-        btnSelectModel.setOnClickListener { showModelSelectDialog() }
-        btnPickBgImage.setOnClickListener { imagePickerLauncher.launch(arrayOf("image/png")) }
-        btnPickUserAvatar.setOnClickListener { userAvatarPickerLauncher.launch(arrayOf("image/*")) }
-        btnPickAiAvatar.setOnClickListener { aiAvatarPickerLauncher.launch(arrayOf("image/*")) }
-        btnSave.setOnClickListener { saveSettings() }
+        setContent {
+            SAChatTheme {
+                SettingsScreen()
+            }
+        }
     }
+
+    // ───────────────────────── 业务逻辑（迁移自旧版） ─────────────────────────
 
     private fun loadSettings() {
         val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -150,28 +159,21 @@ class SettingsActivity : AppCompatActivity() {
         apiEntries.addAll(loaded)
         activeApiIndex = sp.getInt(SettingsKeys.KEY_ACTIVE_API, 0).coerceIn(0, (apiEntries.size - 1).coerceAtLeast(0))
 
-        val fontSize = sp.getInt(SettingsKeys.KEY_FONT_SIZE, 15)
-        etFontSize.setText(fontSize.toString())
-        updateFontPreview()
+        fontSizeText = sp.getInt(SettingsKeys.KEY_FONT_SIZE, 15).toString()
 
         bgImageBase64 = sp.getString(SettingsKeys.KEY_BG_IMAGE, null)
         bgImageName = sp.getString("bg_image_name", null)
 
-        val bgMode = sp.getString(SettingsKeys.KEY_BG_MODE, "color") ?: "color"
-        if (bgMode == "image") rbBgImage.isChecked = true else rbBgColor.isChecked = true
+        bgMode = sp.getString(SettingsKeys.KEY_BG_MODE, "color") ?: "color"
+        bgScale = sp.getString(SettingsKeys.KEY_BG_SCALE, "fit") ?: "fit"
 
-        val bgScale = sp.getString(SettingsKeys.KEY_BG_SCALE, "fit") ?: "fit"
-        if (bgScale == "fill") rbBgFill.isChecked = true else rbBgFit.isChecked = true
+        systemPromptText = ConversationManager.getDefaultSystemPrompt()
+        maxHistoryText = sp.getInt(SettingsKeys.KEY_MAX_HISTORY, Conversation.MAX_HISTORY).toString()
+        worldBudgetText = sp.getInt(SettingsKeys.KEY_WORLDINFO_BUDGET, WorldInfoEngine.DEFAULT_BUDGET).toString()
+        webSearchUrlText = sp.getString(SettingsKeys.KEY_WEB_SEARCH_URL, "") ?: ""
 
-        etSystemPrompt.setText(ConversationManager.getDefaultSystemPrompt())
-        etMaxHistory.setText(sp.getInt(SettingsKeys.KEY_MAX_HISTORY, www.cetool.com.model.Conversation.MAX_HISTORY).toString())
-        etWorldBudget.setText(sp.getInt(SettingsKeys.KEY_WORLDINFO_BUDGET, WorldInfoEngine.DEFAULT_BUDGET).toString())
-        etWebSearchUrl.setText(sp.getString(SettingsKeys.KEY_WEB_SEARCH_URL, ""))
-
-        if (bgImageName != null) tvBgImageName.text = bgImageName
-
-        etUserName.setText(sp.getString(SettingsKeys.KEY_USER_NAME, "用户"))
-        etAiName.setText(sp.getString(SettingsKeys.KEY_AI_NAME, "AI"))
+        userNameText = sp.getString(SettingsKeys.KEY_USER_NAME, "用户") ?: "用户"
+        aiNameText = sp.getString(SettingsKeys.KEY_AI_NAME, "AI") ?: "AI"
         userAvatarBase64 = sp.getString(SettingsKeys.KEY_USER_AVATAR, null)
         aiAvatarBase64 = sp.getString(SettingsKeys.KEY_AI_AVATAR, null)
     }
@@ -190,27 +192,6 @@ class SettingsActivity : AppCompatActivity() {
         R.string.provider_open_kilo
     )
 
-    private fun setupProviderSpinner() {
-        val labels = providerModeLabels.map { getString(it) }.toTypedArray()
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
-        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
-        spinnerProvider.adapter = adapter
-
-        loadProviderMode()
-
-        spinnerProvider.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val mode = providerModes[position]
-                if (mode != providerMode) {
-                    providerMode = mode
-                    applyProviderMode(mode)
-                }
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-    }
-
     /** 启动时从 SharedPreferences 恢复预设模式与手动输入快照 */
     private fun loadProviderMode() {
         val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -227,14 +208,9 @@ class SettingsActivity : AppCompatActivity() {
                 .apply()
         }
 
-        spinnerProvider.setSelection(providerModes.indexOf(providerMode).coerceAtLeast(0))
+        if (providerMode == SettingsKeys.PROVIDER_CUSTOM) return
 
-        if (providerMode == SettingsKeys.PROVIDER_CUSTOM) {
-            tvProviderHint.visibility = View.GONE
-            return
-        }
-
-        // Free Gateway: OpenKilo / OpenCode Zen 免费模式下恢复模型选择与按钮显隐
+        // Free Gateway: OpenKilo / OpenCode Zen 免费模式下恢复模型选择
         if (providerMode == SettingsKeys.PROVIDER_OPEN_KILO) {
             kiloModelOption = sp.getString(SettingsKeys.KEY_KILO_MODEL, SettingsKeys.KILO_MODEL)
                 ?: SettingsKeys.KILO_MODEL
@@ -244,11 +220,6 @@ class SettingsActivity : AppCompatActivity() {
             zenModelOption = sp.getString(SettingsKeys.KEY_ZEN_MODEL, SettingsKeys.ZEN_MODEL_DEFAULT)
                 ?: SettingsKeys.ZEN_MODEL_DEFAULT
         }
-        tvProviderHint.visibility = View.VISIBLE
-        containerApiList.visibility = View.GONE
-        btnAddApi.visibility = View.GONE
-        btnSelectModel.visibility = View.VISIBLE
-        updateModelButtonText()
         val snapshotJson = sp.getString(SettingsKeys.KEY_PROVIDER_MANUAL_SNAPSHOT, null)
         if (!snapshotJson.isNullOrBlank()) {
             val type = object : TypeToken<List<SettingsKeys.ApiEntry>>() {}.type
@@ -262,12 +233,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun applyProviderMode(mode: String) {
         when (mode) {
             SettingsKeys.PROVIDER_OPEN_KILO -> {
-                tvProviderHint.visibility = View.VISIBLE
-                // Free Gateway: OpenKilo 模式下隐藏 API 列表与添加按钮，只留模型选择
-                containerApiList.visibility = View.GONE
-                btnAddApi.visibility = View.GONE
-                btnSelectModel.visibility = View.VISIBLE
-                updateModelButtonText()
                 fillPresetIntoActiveEntry(
                     label = getString(R.string.provider_open_kilo),
                     url = SettingsKeys.KILO_BASE_URL,
@@ -276,12 +241,6 @@ class SettingsActivity : AppCompatActivity() {
                 )
             }
             SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
-                tvProviderHint.visibility = View.VISIBLE
-                // Free Gateway: OpenCode Zen 模式下隐藏 API 列表与添加按钮，只留模型选择
-                containerApiList.visibility = View.GONE
-                btnAddApi.visibility = View.GONE
-                btnSelectModel.visibility = View.VISIBLE
-                updateModelButtonText()
                 fillPresetIntoActiveEntry(
                     label = getString(R.string.provider_open_code_zen),
                     url = SettingsKeys.ZEN_BASE_URL,
@@ -290,21 +249,14 @@ class SettingsActivity : AppCompatActivity() {
                 )
             }
             else -> {
-                tvProviderHint.visibility = View.GONE
-                // Free Gateway Integration: 恢复自定义模式下的 API 列表与添加按钮
-                containerApiList.visibility = View.VISIBLE
-                btnAddApi.visibility = View.VISIBLE
-                btnSelectModel.visibility = View.GONE
                 restoreManualState()
             }
         }
         persistProviderState()
-        renderApiList()
     }
 
     // ─── Free Gateway: OpenKilo / OpenCode Zen 模型选择 ────────────
 
-    /** OpenKilo 模型选项（values 直接存实际模型名，后续在此追加新选项） */
     private val kiloModelOptions = arrayOf(
         SettingsKeys.KILO_MODEL,
         SettingsKeys.KILO_MODEL_NEMOTRON_ULTRA,
@@ -323,7 +275,6 @@ class SettingsActivity : AppCompatActivity() {
         R.string.model_laguna
     )
 
-    /** OpenCode Zen 模型选项（模型 ID 为纯名称，调用时不加 opencode/ 前缀） */
     private val zenModelOptions = arrayOf(
         SettingsKeys.ZEN_MODEL_MIMO,
         SettingsKeys.ZEN_MODEL_LING,
@@ -356,50 +307,20 @@ class SettingsActivity : AppCompatActivity() {
         return if (providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) zenModelOption else kiloModelOption
     }
 
-    private fun updateModelButtonText() {
+    /** 当前模型显示名 */
+    private fun currentModelLabel(): String {
         val (options, labels) = currentModelOptions()
         val idx = options.indexOf(currentModelValue())
-        val label = if (idx >= 0) getString(labels[idx]) else currentModelValue()
-        btnSelectModel.text = "${getString(R.string.select_model)}：$label"
+        return if (idx >= 0) getString(labels[idx]) else currentModelValue()
     }
 
-    private fun showModelSelectDialog() {
-        val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        // Free Gateway Integration: 每次启动首次点击时弹提示，之后本次启动内不再弹
-        if (!sp.getBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, false)) {
-            sp.edit().putBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, true).apply()
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.kilo_model_tip_title)
-                .setMessage(R.string.kilo_model_tip_message)
-                .setPositiveButton(R.string.got_it) { _, _ ->
-                    showModelOptionsDialog()
-                }
-                .setCancelable(false)
-                .show()
-            return
+    private fun onModelSelected(value: String) {
+        if (providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) {
+            zenModelOption = value
+        } else {
+            kiloModelOption = value
         }
-        showModelOptionsDialog()
-    }
-
-    private fun showModelOptionsDialog() {
-        val (options, labels) = currentModelOptions()
-        val labelStrings = labels.map { getString(it) }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.select_model)
-            .setSingleChoiceItems(labelStrings, options.indexOf(currentModelValue()).coerceAtLeast(0)) { dialog, which ->
-                val value = options[which]
-                // Free Gateway: 按模式保存各自的模型选择
-                if (providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) {
-                    zenModelOption = value
-                } else {
-                    kiloModelOption = value
-                }
-                updateModelButtonText()
-                persistProviderState()
-                dialog.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
+        persistProviderState()
     }
 
     /** 将预设的 Base URL / 模型 / Key 填入当前激活的 API 条目 */
@@ -444,43 +365,38 @@ class SettingsActivity : AppCompatActivity() {
     /** 持久化预设模式、API 列表及手动输入快照 */
     private fun persistProviderState() {
         val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        sp.edit {
-            putString(SettingsKeys.KEY_PROVIDER_MODE, providerMode)
-            putString(SettingsKeys.KEY_API_CONFIGS, gson.toJson(apiEntries))
-            putInt(SettingsKeys.KEY_ACTIVE_API, activeApiIndex)
-            if (providerMode != SettingsKeys.PROVIDER_CUSTOM) {
-                putString(SettingsKeys.KEY_KILO_MODEL, kiloModelOption)
-                putString(SettingsKeys.KEY_ZEN_MODEL, zenModelOption)
-                putString(
+        sp.edit()
+            .putString(SettingsKeys.KEY_PROVIDER_MODE, providerMode)
+            .putString(SettingsKeys.KEY_API_CONFIGS, gson.toJson(apiEntries))
+            .putInt(SettingsKeys.KEY_ACTIVE_API, activeApiIndex)
+            .apply()
+        if (providerMode != SettingsKeys.PROVIDER_CUSTOM) {
+            sp.edit()
+                .putString(SettingsKeys.KEY_KILO_MODEL, kiloModelOption)
+                .putString(SettingsKeys.KEY_ZEN_MODEL, zenModelOption)
+                .putString(
                     SettingsKeys.KEY_PROVIDER_MANUAL_SNAPSHOT,
                     gson.toJson(manualEntriesSnapshot ?: emptyList<SettingsKeys.ApiEntry>())
                 )
-                putInt(SettingsKeys.KEY_PROVIDER_MANUAL_ACTIVE_INDEX, manualActiveIndexSnapshot)
-                putBoolean(SettingsKeys.KEY_PROVIDER_AUTO_CREATED, autoCreatedByPreset)
-            } else {
-                remove(SettingsKeys.KEY_PROVIDER_MANUAL_SNAPSHOT)
-                remove(SettingsKeys.KEY_PROVIDER_MANUAL_ACTIVE_INDEX)
-                remove(SettingsKeys.KEY_PROVIDER_AUTO_CREATED)
-            }
+                .putInt(SettingsKeys.KEY_PROVIDER_MANUAL_ACTIVE_INDEX, manualActiveIndexSnapshot)
+                .putBoolean(SettingsKeys.KEY_PROVIDER_AUTO_CREATED, autoCreatedByPreset)
+                .apply()
+        } else {
+            sp.edit()
+                .remove(SettingsKeys.KEY_PROVIDER_MANUAL_SNAPSHOT)
+                .remove(SettingsKeys.KEY_PROVIDER_MANUAL_ACTIVE_INDEX)
+                .remove(SettingsKeys.KEY_PROVIDER_AUTO_CREATED)
+                .apply()
         }
     }
 
-    private fun updateFontPreview() {
-        val size = etFontSize.text?.toString()?.toIntOrNull() ?: 15
-        tvFontPreview.textSize = size.toFloat()
-    }
-
-    private fun setupBgModeToggle() {
-        rgBgMode.setOnCheckedChangeListener { _, id ->
-            layoutBgImage.visibility = if (id == R.id.rbBgImage) View.VISIBLE else View.GONE
-        }
-    }
+    // ─── 图片处理（与旧版一致：缩放 + Base64） ───
 
     private fun handleBgImagePicked(uri: Uri) {
         try {
             val inputStream = contentResolver.openInputStream(uri) ?: return
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
+            inputStream.close()
             if (bitmap == null) { Toast.makeText(this, "图片无效", Toast.LENGTH_SHORT).show(); return }
 
             val maxSize = 1024
@@ -499,7 +415,6 @@ class SettingsActivity : AppCompatActivity() {
                     if (idx >= 0) bgImageName = it.getString(idx)
                 }
             }
-            tvBgImageName.text = bgImageName ?: "已选择图片"
             Toast.makeText(this, "背景图片已选择", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "图片加载失败", Toast.LENGTH_SHORT).show()
@@ -510,7 +425,7 @@ class SettingsActivity : AppCompatActivity() {
         try {
             val inputStream = contentResolver.openInputStream(uri) ?: return
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
+            inputStream.close()
             if (bitmap == null) { Toast.makeText(this, "图片无效", Toast.LENGTH_SHORT).show(); return }
 
             val maxSize = 256
@@ -524,10 +439,8 @@ class SettingsActivity : AppCompatActivity() {
 
             if (isAi) {
                 aiAvatarBase64 = base64
-                btnPickAiAvatar.text = "AI 头像已选择"
             } else {
                 userAvatarBase64 = base64
-                btnPickUserAvatar.text = "头像已选择"
             }
             Toast.makeText(this, "头像已选择", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
@@ -535,154 +448,40 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun showApiEntryDialog(index: Int?) {
-        val entry = if (index != null && index < apiEntries.size) apiEntries[index] else SettingsKeys.ApiEntry()
-        val fields = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 16, 48, 16)
-        }
-
-        val etLabel = TextInputEditText(this).apply { setText(entry.label); hint = "标签（如：主力GPT）" }
-        val etUrl = TextInputEditText(this).apply { setText(entry.url); hint = "API 地址" }
-        val etKey = TextInputEditText(this).apply { setText(entry.key); hint = "API Key" }
-        val etModel = TextInputEditText(this).apply { setText(entry.model); hint = "模型名称" }
-
-        // Free Gateway Integration: 预设模式下禁用 API Key 输入框
-        if (providerMode != SettingsKeys.PROVIDER_CUSTOM) {
-            etKey.isEnabled = false
-        }
-
-        for (editText in listOf(etLabel, etUrl, etKey, etModel)) {
-            val inputLayout = TextInputLayout(this, null, com.google.android.material.R.style.Widget_Material3_TextInputLayout_OutlinedBox).apply {
-                addView(editText)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.bottomMargin = 12 }
-            }
-            fields.addView(inputLayout)
-
-            // Free Gateway Integration: 在 API Key 输入框下方显示免费服务提示
-            if (editText === etKey && providerMode != SettingsKeys.PROVIDER_CUSTOM) {
-                fields.addView(TextView(this).apply {
-                    text = getString(R.string.provider_free_hint)
-                    textSize = 12f
-                    setTextColor(0xFF757575.toInt())
-                    setPadding(0, 0, 0, (resources.displayMetrics.density * 12).toInt())
-                })
-            }
-        }
-
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(if (index != null) "编辑 API" else "添加 API")
-            .setView(fields)
-            .setPositiveButton("确定", null)
-            .setNegativeButton("取消", null)
-            .show()
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
-            .setOnClickListener {
-                val label = etLabel.text?.toString()?.trim() ?: ""
-                if (label.isBlank()) { Toast.makeText(this, "标签不能为空", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-                val newEntry = SettingsKeys.ApiEntry(
-                    label = label,
-                    url = etUrl.text?.toString()?.trim() ?: "",
-                    key = etKey.text?.toString()?.trim() ?: "",
-                    model = etModel.text?.toString()?.trim() ?: ""
-                )
-                if (index != null && index < apiEntries.size) apiEntries[index] = newEntry else apiEntries.add(newEntry)
-                renderApiList()
-                dialog.dismiss()
-            }
-    }
-
-    private fun renderApiList() {
-        containerApiList.removeAllViews()
-        val density = resources.displayMetrics.density
-        for ((i, entry) in apiEntries.withIndex()) {
-            val isActive = i == activeApiIndex
-            val card = MaterialCardView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.bottomMargin = (density * 6).toInt() }
-                radius = density * 8
-                cardElevation = 0f
-                strokeWidth = 0
-                setCardBackgroundColor(
-                    if (isActive) ContextCompat.getColor(this@SettingsActivity, R.color.md_theme_primaryContainer)
-                    else ContextCompat.getColor(this@SettingsActivity, R.color.md_theme_surface)
-                )
-                setContentPadding((density * 12).toInt(), (density * 8).toInt(), (density * 12).toInt(), (density * 8).toInt())
-            }
-
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            }
-
-            val textCol = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            textCol.addView(TextView(this).apply { text = entry.label; textSize = 15f; setTextColor(0xFF212121.toInt()) })
-            textCol.addView(TextView(this).apply {
-                text = if (isActive) "当前使用" else entry.model.ifBlank { "未配置" }
-                textSize = 12f; setTextColor(if (isActive) 0xFF1976D2.toInt() else 0xFF757575.toInt())
-            })
-
-            val btnDelete = MaterialButton(this, null, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
-                text = "删除"
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { gravity = android.view.Gravity.CENTER_VERTICAL }
-                setTextColor(0xFFC62828.toInt())
-                setOnClickListener {
-                    apiEntries.removeAt(i)
-                    if (activeApiIndex >= apiEntries.size) activeApiIndex = (apiEntries.size - 1).coerceAtLeast(0)
-                    renderApiList()
-                }
-            }
-
-            row.addView(textCol)
-            row.addView(btnDelete)
-            card.addView(row)
-            card.setOnClickListener { activeApiIndex = i; renderApiList() }
-            containerApiList.addView(card)
-        }
-    }
-
     private fun saveSettings() {
         val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        sp.edit {
-            putString(SettingsKeys.KEY_API_CONFIGS, gson.toJson(apiEntries))
-            putInt(SettingsKeys.KEY_ACTIVE_API, activeApiIndex)
+        sp.edit()
+            .putString(SettingsKeys.KEY_API_CONFIGS, gson.toJson(apiEntries))
+            .putInt(SettingsKeys.KEY_ACTIVE_API, activeApiIndex)
             // Free Gateway Integration: 保存预设服务商模式
-            putString(SettingsKeys.KEY_PROVIDER_MODE, providerMode)
-            putString(SettingsKeys.KEY_KILO_MODEL, kiloModelOption)
-            putString(SettingsKeys.KEY_ZEN_MODEL, zenModelOption)
-            putInt(SettingsKeys.KEY_FONT_SIZE, etFontSize.text?.toString()?.toIntOrNull() ?: 15)
+            .putString(SettingsKeys.KEY_PROVIDER_MODE, providerMode)
+            .putString(SettingsKeys.KEY_KILO_MODEL, kiloModelOption)
+            .putString(SettingsKeys.KEY_ZEN_MODEL, zenModelOption)
+            .putInt(SettingsKeys.KEY_FONT_SIZE, fontSizeText.toIntOrNull() ?: 15)
             // 记忆历史消息轮数（全局生效），钳制在 5~100 范围内
-            putInt(
+            .putInt(
                 SettingsKeys.KEY_MAX_HISTORY,
-                (etMaxHistory.text?.toString()?.toIntOrNull() ?: www.cetool.com.model.Conversation.MAX_HISTORY)
+                (maxHistoryText.toIntOrNull() ?: Conversation.MAX_HISTORY)
                     .coerceIn(SettingsKeys.MAX_HISTORY_MIN, SettingsKeys.MAX_HISTORY_MAX)
             )
-            putInt(
+            .putInt(
                 SettingsKeys.KEY_WORLDINFO_BUDGET,
-                (etWorldBudget.text?.toString()?.toIntOrNull() ?: WorldInfoEngine.DEFAULT_BUDGET)
+                (worldBudgetText.toIntOrNull() ?: WorldInfoEngine.DEFAULT_BUDGET)
                     .coerceIn(200, 20000)
             )
-            putString(SettingsKeys.KEY_BG_MODE, if (rbBgImage.isChecked) "image" else "color")
-            putString(SettingsKeys.KEY_BG_IMAGE, bgImageBase64)
-            putString("bg_image_name", bgImageName)
-            putString(SettingsKeys.KEY_BG_SCALE, if (rbBgFill.isChecked) "fill" else "fit")
-            putString(SettingsKeys.KEY_WEB_SEARCH_URL, etWebSearchUrl.text?.toString()?.trim() ?: "")
-            putString(SettingsKeys.KEY_USER_NAME, etUserName.text?.toString()?.trim()?.ifBlank { "用户" })
-            putString(SettingsKeys.KEY_AI_NAME, etAiName.text?.toString()?.trim()?.ifBlank { "AI" })
-            putString(SettingsKeys.KEY_USER_AVATAR, userAvatarBase64)
-            putString(SettingsKeys.KEY_AI_AVATAR, aiAvatarBase64)
-        }
+            .putString(SettingsKeys.KEY_BG_MODE, bgMode)
+            .putString(SettingsKeys.KEY_BG_IMAGE, bgImageBase64)
+            .putString("bg_image_name", bgImageName)
+            .putString(SettingsKeys.KEY_BG_SCALE, bgScale)
+            .putString(SettingsKeys.KEY_WEB_SEARCH_URL, webSearchUrlText.trim())
+            .putString(SettingsKeys.KEY_USER_NAME, userNameText.trim().ifBlank { "用户" })
+            .putString(SettingsKeys.KEY_AI_NAME, aiNameText.trim().ifBlank { "AI" })
+            .putString(SettingsKeys.KEY_USER_AVATAR, userAvatarBase64)
+            .putString(SettingsKeys.KEY_AI_AVATAR, aiAvatarBase64)
+            .apply()
 
         ConversationManager.init(this)
-        ConversationManager.setDefaultSystemPrompt(etSystemPrompt.text?.toString()?.trim() ?: "")
+        ConversationManager.setDefaultSystemPrompt(systemPromptText.trim())
 
         if (apiEntries.isNotEmpty() && activeApiIndex < apiEntries.size) {
             val active = apiEntries[activeApiIndex]
@@ -698,4 +497,650 @@ class SettingsActivity : AppCompatActivity() {
         startActivity(Intent(this, ChatActivity::class.java))
         finish()
     }
+
+    // ───────────────────────── Compose UI ─────────────────────────
+
+    private val isFreeMode: Boolean
+        get() = providerMode != SettingsKeys.PROVIDER_CUSTOM
+
+    @Composable
+    private fun SettingsScreen() {
+        val activity = this
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+        ) {
+            // 页面大标题
+            Text(
+                text = "设置",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)
+            )
+            Text(
+                text = "个性化你的 SAChat",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+
+            // ── 分组 1：API 配置 ──
+            SettingsCard(title = "API 配置") {
+                // 免费模式（OpenKilo/OpenCode Zen）隐藏 API 列表与添加按钮（与旧版一致）
+                if (!isFreeMode) {
+                    // API 条目列表
+                    apiEntries.forEachIndexed { index, entry ->
+                        ApiEntryCard(
+                            entry = entry,
+                            isActive = index == activeApiIndex,
+                            onClick = { activeApiIndex = index },
+                            onDelete = {
+                                apiEntries.removeAt(index)
+                                if (activeApiIndex >= apiEntries.size) {
+                                    activeApiIndex = (apiEntries.size - 1).coerceAtLeast(0)
+                                }
+                            }
+                        )
+                    }
+                    // 添加按钮
+                    TextButton(onClick = {
+                        apiDialogIndex = null
+                        showApiDialog = true
+                    }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("添加 API")
+                    }
+                }
+                // 预设服务商
+                SettingsRow(
+                    icon = Icons.Filled.Bolt,
+                    title = stringResource(R.string.provider_preset),
+                    value = providerModeLabel(),
+                    onClick = { showProviderSelect = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // 选择模型按钮（免费模式显示）
+                AnimatedVisibility(
+                    visible = isFreeMode,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column {
+                        OutlinedButton(
+                            onClick = { showModelTipOrOptions() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("${stringResource(R.string.select_model)}：${currentModelLabel()}")
+                        }
+                        Text(
+                            text = stringResource(R.string.provider_free_hint),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── 分组 2：字体大小 ──
+            SettingsCard(title = "字体大小") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = fontSizeText,
+                        onValueChange = { fontSizeText = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("大小（sp）") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = "预览",
+                        fontSize = (fontSizeText.toIntOrNull() ?: 15).sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── 分组 3：提示词管理 ──
+            SettingsCard(title = "提示词管理") {
+                OutlinedTextField(
+                    value = systemPromptText,
+                    onValueChange = { systemPromptText = it },
+                    label = { Text("默认系统提示词") },
+                    minLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                HintText("仅在默认聊天模式起效，角色模式只按角色卡提示词来")
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = maxHistoryText,
+                    onValueChange = { maxHistoryText = it.filter { c -> c.isDigit() }.take(3) },
+                    label = { Text(stringResource(R.string.label_max_history)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                HintText(stringResource(R.string.max_history_note))
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = worldBudgetText,
+                    onValueChange = { worldBudgetText = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("世界书 token 预算（酒馆 Context %/Budget 对齐）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                HintText("世界书命中条目按此预算注入上下文，超出部分不注入（常驻条目优先）")
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── 分组 4：联网搜索配置 ──
+            SettingsCard(title = "联网搜索配置") {
+                OutlinedTextField(
+                    value = webSearchUrlText,
+                    onValueChange = { webSearchUrlText = it },
+                    label = { Text("搜索 API 地址") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                HintText("配置后可在右侧三点菜单中开启联网搜索")
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── 分组 5：背景图片 ──
+            SettingsCard(title = "背景图片") {
+                Row {
+                    BackgroundModeChip(
+                        label = "自动适应",
+                        selected = bgMode != "image",
+                        onClick = { bgMode = "color" }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    BackgroundModeChip(
+                        label = "图片填充",
+                        selected = bgMode == "image",
+                        onClick = { bgMode = "image" }
+                    )
+                }
+                AnimatedVisibility(
+                    visible = bgMode == "image",
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { imagePickerLauncher.launch(arrayOf("image/png")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text("选择 PNG 图片") }
+                        Text(
+                            text = bgImageName ?: "未选择图片",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            BackgroundModeChip(
+                                label = "适应比例",
+                                selected = bgScale != "fill",
+                                onClick = { bgScale = "fit" }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            BackgroundModeChip(
+                                label = "原比例填充",
+                                selected = bgScale == "fill",
+                                onClick = { bgScale = "fill" }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── 分组 6：聊天昵称 ──
+            SettingsCard(title = "聊天昵称") {
+                OutlinedTextField(
+                    value = userNameText,
+                    onValueChange = { userNameText = it },
+                    label = { Text(stringResource(R.string.label_user_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = aiNameText,
+                    onValueChange = { aiNameText = it },
+                    label = { Text(stringResource(R.string.label_ai_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { userAvatarPickerLauncher.launch(arrayOf("image/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(if (userAvatarBase64 != null) "我的头像已选择" else "选择我的头像") }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { aiAvatarPickerLauncher.launch(arrayOf("image/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text(if (aiAvatarBase64 != null) "AI 头像已选择" else "选择 AI 头像") }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ── 保存按钮 ──
+            Button(
+                onClick = { activity.saveSettings() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("保存设置", fontSize = 16.sp)
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // ── 对话框 ──
+        if (showApiDialog) {
+            ApiEntryDialog(
+                index = apiDialogIndex,
+                initialEntry = apiDialogIndex?.let { apiEntries.getOrNull(it) } ?: SettingsKeys.ApiEntry(),
+                keyEnabled = !isFreeMode,
+                onConfirm = { label, url, key, model ->
+                    val newEntry = SettingsKeys.ApiEntry(label = label, url = url, key = key, model = model)
+                    val idx = apiDialogIndex
+                    if (idx != null && idx < apiEntries.size) apiEntries[idx] = newEntry else apiEntries.add(newEntry)
+                    showApiDialog = false
+                },
+                onDismiss = { showApiDialog = false }
+            )
+        }
+        if (showProviderSelect) {
+            AlertDialog(
+                onDismissRequest = { showProviderSelect = false },
+                title = { Text(stringResource(R.string.provider_preset)) },
+                text = {
+                    Column {
+                        providerModes.forEachIndexed { index, mode ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showProviderSelect = false
+                                        if (mode != providerMode) {
+                                            providerMode = mode
+                                            applyProviderMode(mode)
+                                        }
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = mode == providerMode,
+                                    onClick = null
+                                )
+                                Text(
+                                    text = getString(providerModeLabels[index]),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showProviderSelect = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            )
+        }
+        if (showModelTip) {
+            AlertDialog(
+                onDismissRequest = { showModelTip = false; showModelOptions = true },
+                title = { Text(stringResource(R.string.kilo_model_tip_title)) },
+                text = { Text(stringResource(R.string.kilo_model_tip_message)) },
+                confirmButton = {
+                    TextButton(onClick = { showModelTip = false; showModelOptions = true }) {
+                        Text(stringResource(R.string.got_it))
+                    }
+                }
+            )
+        }
+        if (showModelOptions) {
+            ModelSelectDialog(
+                title = stringResource(R.string.select_model),
+                options = currentModelOptions().first.toList(),
+                labels = currentModelOptions().second.map { getString(it) },
+                selected = currentModelValue(),
+                onSelect = { value ->
+                    onModelSelected(value)
+                    showModelOptions = false
+                },
+                onDismiss = { showModelOptions = false }
+            )
+        }
+    }
+
+    private fun providerModeLabel(): String {
+        val idx = providerModes.indexOf(providerMode).coerceAtLeast(0)
+        return getString(providerModeLabels[idx])
+    }
+
+    private fun showModelTipOrOptions() {
+        val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        // Free Gateway Integration: 每次启动首次点击时弹提示，之后本次启动内不再弹
+        if (!sp.getBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, false)) {
+            sp.edit().putBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, true).apply()
+            showModelTip = true
+        } else {
+            showModelOptions = true
+        }
+    }
+
+    @Composable
+    private fun SettingsCard(title: String, content: @Composable () -> Unit) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(12.dp))
+                content()
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingsRow(
+        icon: ImageVector,
+        title: String,
+        value: String,
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier
+    ) {
+        Row(
+            modifier = modifier
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = value,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+
+    @Composable
+    private fun ApiEntryCard(
+        entry: SettingsKeys.ApiEntry,
+        isActive: Boolean,
+        onClick: () -> Unit,
+        onDelete: () -> Unit
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(14.dp),
+            color = if (isActive) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.label,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isActive) "当前使用" else entry.model.ifBlank { "未配置" },
+                        fontSize = 12.sp,
+                        color = if (isActive) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                TextButton(onClick = onDelete) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun BackgroundModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            },
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.clickable(onClick = onClick)
+        ) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            )
+        }
+    }
+
+    @Composable
+    private fun HintText(text: String) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+// ───────────────────────── 对话框组件 ─────────────────────────
+
+@Composable
+private fun ApiEntryDialog(
+    index: Int?,
+    initialEntry: SettingsKeys.ApiEntry,
+    keyEnabled: Boolean,
+    onConfirm: (label: String, url: String, key: String, model: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var label by remember { mutableStateOf(initialEntry.label) }
+    var url by remember { mutableStateOf(initialEntry.url) }
+    var key by remember { mutableStateOf(initialEntry.key) }
+    var model by remember { mutableStateOf(initialEntry.model) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (index != null) "编辑 API" else "添加 API") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text("标签（如：主力GPT）") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("API 地址") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("API Key") },
+                    singleLine = true,
+                    enabled = keyEnabled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                if (!keyEnabled) {
+                    Text(
+                        text = "免费服务无需密钥，由第三方提供，稳定性有限",
+                        fontSize = 12.sp,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                }
+                OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it },
+                    label = { Text("模型名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (label.isBlank()) {
+                    Toast.makeText(context, "标签不能为空", Toast.LENGTH_SHORT).show()
+                } else {
+                    onConfirm(label.trim(), url.trim(), key.trim(), model.trim())
+                }
+            }) { Text("确定") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun ModelSelectDialog(
+    title: String,
+    options: List<String>,
+    labels: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEachIndexed { index, option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(option) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = option == selected,
+                            onClick = null
+                        )
+                        Text(
+                            text = labels.getOrElse(index) { option },
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }

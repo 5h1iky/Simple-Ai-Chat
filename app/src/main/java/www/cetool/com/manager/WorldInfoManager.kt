@@ -55,6 +55,12 @@ object WorldInfoManager {
         } catch (_: Exception) { null }
     }
 
+    /** 读取世界书原始 JSON（导出用） */
+    fun rawJson(context: Context, id: String): String? {
+        val file = File(getDir(context), "$id.json")
+        return if (file.exists()) try { file.readText() } catch (_: Exception) { null } else null
+    }
+
     private fun parseEntries(data: com.google.gson.JsonObject): MutableList<WorldEntry> {
         val entries = mutableListOf<WorldEntry>()
         val entriesArray = data.getAsJsonArray("entries") ?: return entries

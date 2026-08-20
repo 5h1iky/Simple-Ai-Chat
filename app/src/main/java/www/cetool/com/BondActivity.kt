@@ -255,7 +255,7 @@ private fun BondDetailScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "🕐 ${timeFormat.format(Date(conv.updatedAt))} · ${conv.messages.count { it.role == www.cetool.com.model.Message.ROLE_USER }} 条消息",
+                                text = "${timeFormat.format(Date(conv.updatedAt))} · ${conv.messages.count { it.role == www.cetool.com.model.Message.ROLE_USER }} 条消息",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
