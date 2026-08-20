@@ -22,7 +22,14 @@ object TavernCardImporter {
         }
 
         val card = gson.fromJson(dataObj, www.cetool.com.model.TavernCardData::class.java)
-        TavernCard(spec = spec, spec_version = root.get("spec_version")?.asString ?: "3.0", data = card)
+        // 头像：兼容顶层 avatarBase64 字段（本项目旧文件格式）
+        val avatar = root.get("avatarBase64")?.takeIf { it.isJsonPrimitive }?.asString
+        TavernCard(
+            spec = spec,
+            spec_version = root.get("spec_version")?.asString ?: "3.0",
+            data = card,
+            avatarBase64 = avatar
+        )
     }
 
     fun export(card: TavernCard): String {
@@ -30,6 +37,9 @@ object TavernCardImporter {
         root.addProperty("spec", card.spec)
         root.addProperty("spec_version", card.spec_version)
         root.add("data", gson.toJsonTree(card.data))
+        if (card.avatarBase64 != null) {
+            root.addProperty("avatarBase64", card.avatarBase64)
+        }
         return gson.toJson(root)
     }
 }
