@@ -5,5 +5,6 @@ data class CharacterInfo(
     val name: String,
     val avatarBase64: String? = null,
     val description: String = "",
+    val tags: List<String> = emptyList(),
     val importedAt: Long = System.currentTimeMillis()
 )

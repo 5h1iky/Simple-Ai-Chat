@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="400dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="本场对话标题"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etArchiveTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="会话标题"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="与用户关系类型"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etArchiveRelationType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="例如：生死之交、欢喜冤家"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="与用户相处模式"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etArchiveInteractionModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="角色如何与你互动"
+            android:inputType="textMultiLine"
+            android:maxLines="3" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="与用户关系底线"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etArchiveBottomLine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="角色的底线"
+            android:inputType="textMultiLine"
+            android:maxLines="3" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="关键事件（追加到已有事件）"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etArchiveKeyEvents"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="用 - 开头的列表项，每行一条"
+            android:inputType="textMultiLine"
+            android:minLines="4"
+            android:maxLines="8" />
+
+    </LinearLayout>
+</ScrollView>

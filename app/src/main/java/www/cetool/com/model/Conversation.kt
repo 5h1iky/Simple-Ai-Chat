@@ -15,7 +15,11 @@ data class Conversation(
     var updatedAt: Long = System.currentTimeMillis(),
     var isStreaming: Boolean = false,
     var characterId: String? = null,
-    var worldInfoId: String? = null
+    var worldInfoId: String? = null,
+    /** 记忆已封存：会话锁定，不可继续发送（对应 MuseAI 的 isSessionArchived） */
+    var isArchived: Boolean = false,
+    /** 文字冒险（跑团）：绑定的多个角色卡 id（非空即冒险模式） */
+    var adventureRoleIds: List<String> = emptyList()
 ) {
     companion object {
         const val DEFAULT_TITLE = "新对话"

@@ -2,6 +2,7 @@ package www.cetool.com.manager
 
 import android.content.Context
 import www.cetool.com.importer.TavernCardImporter
+import www.cetool.com.importer.WorldInfoImporter
 import www.cetool.com.model.CharacterInfo
 import www.cetool.com.model.TavernCard
 import java.io.File
@@ -26,7 +27,9 @@ object CharacterManager {
                     CharacterInfo(
                         id = file.nameWithoutExtension,
                         name = card.data.name,
+                        avatarBase64 = card.avatarBase64,
                         description = card.data.description.take(100),
+                        tags = card.data.getCharacterFields().identityTags,
                         importedAt = file.lastModified()
                     )
                 } catch (_: Exception) { null }
@@ -46,9 +49,28 @@ object CharacterManager {
     fun save(context: Context, json: String): String? {
         val card = TavernCardImporter.parse(json).getOrNull() ?: return null
         val id = UUID.randomUUID().toString().take(8)
+        // 角色卡内嵌世界书（酒馆 extensions.world_book）：自动建书并绑定
+        val finalCard = processEmbeddedWorldBook(context, card)
         val file = File(getDir(context), "$id.json")
-        file.writeText(json)
+        file.writeText(TavernCardImporter.export(finalCard))
         return id
+    }
+
+    /**
+     * 检测角色卡内嵌世界书（SillyTavern 格式 extensions.world_book）：
+     * 用 WorldInfoImporter 解析建书，并把新书 id 写入 extensions["sachat_worldbook_id"]。
+     */
+    private fun processEmbeddedWorldBook(context: Context, card: TavernCard): TavernCard {
+        val wb = card.data.extensions["world_book"] ?: return card
+        if (!wb.isJsonObject) return card
+        val result = WorldInfoImporter.parse(wb.toString())
+        if (result is WorldInfoImporter.ImportResult.Success && result.info.entries.isNotEmpty()) {
+            val wid = WorldInfoManager.saveNew(context, result.info)
+            val newExtensions = card.data.extensions.toMutableMap()
+            newExtensions["sachat_worldbook_id"] = com.google.gson.JsonPrimitive(wid)
+            return card.copy(data = card.data.copy(extensions = newExtensions))
+        }
+        return card
     }
 
     fun overwrite(context: Context, characterId: String, json: String): Boolean {
@@ -64,24 +86,11 @@ object CharacterManager {
     }
 
     fun assembleSystemPrompt(card: TavernCard): String {
-        val parts = mutableListOf<String>()
+        return CharacterCompiler.assembleSystemPrompt(card)
+    }
 
-        if (card.data.description.isNotBlank()) {
-            parts.add("[角色设定]\n${card.data.description}")
-        }
-        if (card.data.personality.isNotBlank()) {
-            parts.add("[性格]\n${card.data.personality}")
-        }
-        if (card.data.scenario.isNotBlank()) {
-            parts.add("[场景]\n${card.data.scenario}")
-        }
-        if (card.data.system_prompt.isNotBlank()) {
-            parts.add(card.data.system_prompt)
-        }
-        if (card.data.mes_example.isNotBlank()) {
-            parts.add("[示例对话]\n${card.data.mes_example}")
-        }
-
-        return parts.joinToString("\n\n")
+    /** 编译角色定义（含示例对话分段），供世界书按酒馆位置注入 */
+    fun compileCharacter(card: TavernCard): CharacterCompiler.CompiledCharacter {
+        return CharacterCompiler.compileCharacter(card)
     }
 }

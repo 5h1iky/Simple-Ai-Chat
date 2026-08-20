@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import okhttp3.sse.EventSource
 import www.cetool.com.SettingsKeys
+import www.cetool.com.manager.CharacterCompiler
 import www.cetool.com.manager.CharacterManager
 import www.cetool.com.manager.WorldInfoEngine
 import www.cetool.com.manager.WorldInfoManager
@@ -17,6 +18,17 @@ import www.cetool.com.network.AiApiClient
 import www.cetool.com.network.MessageItem
 
 object ConversationManager {
+
+    /** 冒险模式 DM/GM 系统指令 */
+    const val ADVENTURE_DM_PROMPT = """你是一名经验丰富的故事主持人（DM/GM）。你将主持一场文字冒险（跑团）：
+1. 根据世界设定与角色卡，推进剧情、描写场景、扮演所有 NPC 与角色。
+2. 用语言、行为、剧情推动互动，每次回复保持沉浸感，不要跳出角色。
+3. 玩家可以用「语言」「行为」「剧情」三种方式输入：
+   - [语言]：说一段话（角色会回应）
+   - [行为]：做一个动作（描述结果）
+   - [剧情]：引导剧情走向（控制故事节奏）
+4. 重要剧情节点给出选择支（A/B/C）让玩家决策。
+5. 保持世界观一致，善用世界书中的设定。"""
 
     private const val PREFS_NAME = "conversations"
     private const val KEY_DATA = "conversation_data"
@@ -116,6 +128,8 @@ object ConversationManager {
     ) {
         val conv = getById(conversationId) ?: return
         if (conv.isStreaming) return
+        // 记忆已封存的会话锁定，禁止继续发送
+        if (conv.isArchived) return
 
         val userMsg = Message(
             role = ROLE_USER,
@@ -141,49 +155,72 @@ object ConversationManager {
 
         val historyItems = mutableListOf<MessageItem>()
 
-        if (conv.characterId != null) {
+        // ─── 系统提示词组装（1.2 对标酒馆：分段 + 世界书按位置注入 + 多源） ───
+        var charDefinition = ""
+        var charExamples = ""
+        var extraSystemPrompt = ""
+        var characterLoreId: String? = null
+
+        if (conv.adventureRoleIds.isNotEmpty()) {
+            // 冒险模式（2.2）：DM 指令 + 多角色卡定义
+            val cards = conv.adventureRoleIds.mapNotNull { CharacterManager.loadCard(appContext, it) }
+            val cardDefs = cards.joinToString("\n\n") { card ->
+                CharacterCompiler.compileCharacter(card).definition
+            }
+            charDefinition = ADVENTURE_DM_PROMPT +
+                (if (cardDefs.isNotBlank()) "\n\n【本场角色卡】\n$cardDefs" else "")
+            extraSystemPrompt = ""
+            charExamples = ""
+        } else if (conv.characterId != null) {
             val card = CharacterManager.loadCard(appContext, conv.characterId!!)
             if (card != null) {
-                val assembled = CharacterManager.assembleSystemPrompt(card)
-                val resolved = Conversation.resolveSystemPrompt(assembled)
-                if (resolved.isNotBlank()) {
-                    historyItems.add(MessageItem.text("system", resolved))
-                }
+                val compiled = CharacterManager.compileCharacter(card)
+                charDefinition = compiled.definition
+                charExamples = compiled.examples
+                extraSystemPrompt = card.data.system_prompt
+                // 角色卡内嵌世界书（导入时自动建书，见 CharacterManager.processEmbeddedWorldBook）
+                characterLoreId = card.data.extensions["sachat_worldbook_id"]
+                    ?.takeIf { it.isJsonPrimitive }?.asString
             } else {
-                val resolved = Conversation.resolveSystemPrompt(conv.systemPrompt)
-                if (resolved.isNotBlank()) {
-                    historyItems.add(MessageItem.text("system", resolved))
-                }
+                charDefinition = conv.systemPrompt
             }
         } else {
-            val resolved = Conversation.resolveSystemPrompt(conv.systemPrompt)
-            if (resolved.isNotBlank()) {
-                historyItems.add(MessageItem.text("system", resolved))
-            }
+            charDefinition = conv.systemPrompt
         }
 
+        // 世界书多源：会话绑定（Chat Lore）+ 角色卡内嵌（Character Lore）
+        val worldSources = mutableListOf<www.cetool.com.model.WorldInfo>()
         if (conv.worldInfoId != null) {
-            val worldInfo = WorldInfoManager.load(appContext, conv.worldInfoId!!)
-            if (worldInfo != null) {
-                val hits = WorldInfoEngine.scan(conv.messages, worldInfo, historyItems)
-                val budgeted = WorldInfoEngine.sortAndBudget(hits)
-                if (budgeted.isNotEmpty()) {
-                    val injection = WorldInfoEngine.buildInjection(budgeted, "")
-                    if (injection.prefix.isNotBlank()) {
-                        val lastSystem = historyItems.indexOfLast { it.role == "system" }
-                        if (lastSystem >= 0) {
-                            val existing = historyItems[lastSystem]
-                            val oldText = existing.content.asJsonPrimitive?.asString ?: ""
-                            historyItems[lastSystem] = MessageItem.text("system", oldText + injection.prefix)
-                        } else {
-                            historyItems.add(0, MessageItem.text("system", injection.prefix.trim()))
-                        }
-                    }
-                    if (injection.suffix.isNotBlank()) {
-                        historyItems.add(MessageItem.text("system", injection.suffix.trim()))
-                    }
-                }
-            }
+            WorldInfoManager.load(appContext, conv.worldInfoId!!)?.let { worldSources.add(it) }
+        }
+        if (characterLoreId != null) {
+            WorldInfoManager.load(appContext, characterLoreId!!)?.let { worldSources.add(it) }
+        }
+
+        val allHits = mutableListOf<www.cetool.com.model.WorldEntry>()
+        for (source in worldSources) {
+            allHits.addAll(WorldInfoEngine.scan(conv.messages, source, historyItems))
+        }
+
+        val budgetPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        val budget = budgetPrefs.getInt(SettingsKeys.KEY_WORLDINFO_BUDGET, WorldInfoEngine.DEFAULT_BUDGET)
+        val budgeted = WorldInfoEngine.sortAndBudget(allHits, budget)
+        val injection = if (budgeted.isNotEmpty()) WorldInfoEngine.buildInjection(budgeted) else null
+
+        val systemParts = mutableListOf<String>()
+        injection?.beforeCharDefs?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
+        if (charDefinition.isNotBlank()) systemParts.add(charDefinition)
+        injection?.afterCharDefs?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
+        if (charExamples.isNotBlank()) {
+            injection?.beforeExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
+            systemParts.add(charExamples)
+            injection?.afterExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
+        }
+        if (extraSystemPrompt.isNotBlank()) systemParts.add(extraSystemPrompt)
+
+        val systemText = systemParts.filter { it.isNotBlank() }.joinToString("\n\n")
+        if (systemText.isNotBlank()) {
+            historyItems.add(MessageItem.text("system", Conversation.resolveSystemPrompt(systemText)))
         }
 
         val settingsPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -214,6 +251,16 @@ object ConversationManager {
                     }
                     historyItems.add(MessageItem.text(msg.role, textContent))
                 }
+            }
+        }
+
+        // @D 深度注入：从末尾数第 injectDepth 条消息的位置插入 system 消息（酒馆语义，depth 0 = 提示词底部）
+        if (injection != null && injection.atDepth.isNotEmpty()) {
+            for (entry in injection.atDepth) {
+                if (entry.content.isBlank()) continue
+                val depth = entry.injectDepth.coerceAtLeast(0)
+                val insertIndex = (historyItems.size - 1 - depth).coerceIn(0, historyItems.size)
+                historyItems.add(insertIndex, MessageItem.text("system", entry.content))
             }
         }
 
@@ -317,6 +364,8 @@ object ConversationManager {
                         id = conv.id, title = conv.title, systemPrompt = conv.systemPrompt,
                         createdAt = conv.createdAt, updatedAt = conv.updatedAt,
                         isStreaming = conv.isStreaming, characterId = conv.characterId, worldInfoId = conv.worldInfoId,
+                        isArchived = conv.isArchived,
+                        adventureRoleIds = conv.adventureRoleIds,
                         messages = conv.messages.map { msg ->
                             MessageEntry(
                                 role = msg.role, content = msg.content, timestamp = msg.timestamp,
@@ -353,6 +402,8 @@ object ConversationManager {
                     id = entry.id, title = entry.title, systemPrompt = entry.systemPrompt,
                     createdAt = entry.createdAt, updatedAt = entry.updatedAt,
                     isStreaming = false, characterId = entry.characterId, worldInfoId = entry.worldInfoId,
+                    isArchived = entry.isArchived ?: false,
+                    adventureRoleIds = entry.adventureRoleIds ?: emptyList(),
                     messages = entry.messages.map { msg ->
                         Message(
                                 role = msg.role, content = msg.content, timestamp = msg.timestamp,
@@ -407,6 +458,8 @@ object ConversationManager {
         val createdAt: Long, val updatedAt: Long, val isStreaming: Boolean,
         val characterId: String? = null,
         val worldInfoId: String? = null,
+        val isArchived: Boolean? = null,
+        val adventureRoleIds: List<String>? = null,
         val messages: List<MessageEntry>
     )
 
