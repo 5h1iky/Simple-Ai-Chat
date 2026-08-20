@@ -43,8 +43,37 @@
             android:exported="false"
             android:theme="@style/Theme.CRtools" />
 
+        <!-- Compose 页面（1.1 角色卡） -->
         <activity
-            android:name=".CreateCharacterActivity"
+            android:name=".CharacterListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CRtools" />
+
+        <activity
+            android:name=".CharacterEditActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CRtools" />
+
+        <!-- Compose 页面（1.2 世界书） -->
+        <activity
+            android:name=".WorldInfoListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CRtools" />
+
+        <activity
+            android:name=".WorldInfoEditActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CRtools" />
+
+        <!-- Compose 页面（2.1 羁绊档案） -->
+        <activity
+            android:name=".BondActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CRtools" />
+
+        <!-- Compose 页面（2.2 文字冒险） -->
+        <activity
+            android:name=".AdventureActivity"
             android:exported="false"
             android:theme="@style/Theme.CRtools" />
 

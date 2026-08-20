@@ -43,6 +43,48 @@ class AiApiClient(
         return if (option == SettingsKeys.KILO_MODEL_AUTO) SettingsKeys.KILO_MODEL else option
     }
 
+    /** 解析后的请求端点信息（流式/非流式共用） */
+    data class Endpoint(
+        val url: String,
+        val model: String,
+        val authHeader: String?,
+        val temperature: Double?
+    )
+
+    /** 按预设模式解析请求地址 / 模型 / 认证头 / temperature */
+    private fun resolveEndpoint(): Endpoint {
+        return when (providerMode) {
+            SettingsKeys.PROVIDER_OPEN_KILO -> {
+                // Free Gateway: OpenKilo 免费路由：无密钥，不发送 apiKey / Authorization 头；
+                // 不发送 temperature，但正常透传 reasoning_effort（思考模式）
+                Endpoint(
+                    url = SettingsKeys.KILO_BASE_URL,
+                    model = resolveKiloModel(kiloModelOption),
+                    authHeader = null,
+                    temperature = null
+                )
+            }
+            SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
+                // Free Gateway: OpenCode Zen：固定 Base URL + 强制 Authorization: Bearer public；
+                // 模型 ID 为纯名称（如 deepseek-v4-flash-free），不加 opencode/ 前缀
+                Endpoint(
+                    url = SettingsKeys.ZEN_BASE_URL,
+                    model = zenModelOption,
+                    authHeader = "Bearer ${SettingsKeys.ZEN_PUBLIC_KEY}",
+                    temperature = null
+                )
+            }
+            else -> {
+                Endpoint(
+                    url = config.apiUrl,
+                    model = config.model,
+                    authHeader = "Bearer ${config.apiKey}",
+                    temperature = 0.7
+                )
+            }
+        }
+    }
+
     fun sendChatStream(
         messages: List<MessageItem>,
         onText: (String) -> Unit,
@@ -51,60 +93,27 @@ class AiApiClient(
         onFinish: () -> Unit,
         onError: (String) -> Unit
     ): EventSource {
-        // Free Gateway Integration: 按预设模式解析请求地址 / 模型 / 认证头 / 可选字段
-        val resolvedUrl: String
-        val resolvedModel: String
-        val authHeader: String?
-        val requestTemperature: Double?
-        val requestThinkingLevel: String?
-        when (providerMode) {
-            SettingsKeys.PROVIDER_OPEN_KILO -> {
-                // Free Gateway: OpenKilo 免费路由：无密钥，不发送 apiKey / Authorization 头；
-                // 不发送 temperature，但正常透传 reasoning_effort（思考模式）
-                resolvedUrl = SettingsKeys.KILO_BASE_URL
-                resolvedModel = resolveKiloModel(kiloModelOption)
-                authHeader = null
-                requestTemperature = null
-                requestThinkingLevel = thinkingLevel
-            }
-            SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
-                // Free Gateway: OpenCode Zen：固定 Base URL + 强制 Authorization: Bearer public；
-                // 模型 ID 为纯名称（如 deepseek-v4-flash-free），不加 opencode/ 前缀；
-                // 不发送 temperature，但正常透传 reasoning_effort（思考模式）
-                resolvedUrl = SettingsKeys.ZEN_BASE_URL
-                resolvedModel = zenModelOption
-                authHeader = "Bearer ${SettingsKeys.ZEN_PUBLIC_KEY}"
-                requestTemperature = null
-                requestThinkingLevel = thinkingLevel
-            }
-            else -> {
-                resolvedUrl = config.apiUrl
-                resolvedModel = config.model
-                authHeader = "Bearer ${config.apiKey}"
-                requestTemperature = 0.7
-                requestThinkingLevel = thinkingLevel
-            }
-        }
+        val endpoint = resolveEndpoint()
 
         val chatRequest = ChatRequest(
-            model = resolvedModel,
+            model = endpoint.model,
             messages = messages,
-            temperature = requestTemperature,
-            reasoning_effort = requestThinkingLevel
+            temperature = endpoint.temperature,
+            reasoning_effort = thinkingLevel
         )
 
         val jsonBody = gson.toJson(chatRequest)
         val requestBody = jsonBody.toRequestBody(jsonMediaType)
 
         // 确保 Base URL 无重复斜杠后拼接 /chat/completions
-        val url = "${resolvedUrl.trimEnd('/')}/chat/completions"
+        val url = "${endpoint.url.trimEnd('/')}/chat/completions"
 
         val requestBuilder = Request.Builder()
             .url(url)
             .addHeader("Content-Type", "application/json")
             .addHeader("Accept", "text/event-stream")
-        if (authHeader != null) {
-            requestBuilder.addHeader("Authorization", authHeader)
+        if (endpoint.authHeader != null) {
+            requestBuilder.addHeader("Authorization", endpoint.authHeader)
         }
         val request = requestBuilder.post(requestBody).build()
 
@@ -198,5 +207,66 @@ class AiApiClient(
             }
         })
         return eventSource
+    }
+
+    /**
+     * 非流式 JSON 请求（记忆封存 / 提取类功能用）。
+     * @return Result(content)：成功时返回模型输出的原始文本（调用方自行解析 JSON）
+     */
+    fun requestJson(
+        messages: List<MessageItem>,
+        temperature: Double = 0.0,
+        maxOutputTokens: Int = 4096,
+        timeoutSeconds: Long = 120
+    ): Result<String> {
+        return try {
+            val endpoint = resolveEndpoint()
+
+            val chatRequest = ChatRequest(
+                model = endpoint.model,
+                messages = messages,
+                temperature = if (endpoint.temperature != null) temperature else null,
+                stream = false,
+                reasoning_effort = null,
+                max_tokens = maxOutputTokens
+            )
+
+            val jsonBody = gson.toJson(chatRequest)
+            val requestBody = jsonBody.toRequestBody(jsonMediaType)
+            val url = "${endpoint.url.trimEnd('/')}/chat/completions"
+
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
+            if (endpoint.authHeader != null) {
+                requestBuilder.addHeader("Authorization", endpoint.authHeader)
+            }
+            val request = requestBuilder.post(requestBody).build()
+
+            val httpClient = client.newBuilder()
+                .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                }
+                val body = response.body?.string() ?: return Result.failure(Exception("空响应"))
+                val parsed = gson.fromJson(body, ChatResponse::class.java)
+                val content = parsed.choices?.firstOrNull()
+                    ?.message?.content?.asJsonPrimitive?.asString
+                if (content.isNullOrBlank()) {
+                    // 兼容返回在 delta 的情况（部分服务商非流式也用 delta）
+                    val delta = parsed.choices?.firstOrNull()?.delta?.content
+                    if (!delta.isNullOrBlank()) {
+                        return Result.success(delta)
+                    }
+                    return Result.failure(Exception("响应中没有内容"))
+                }
+                Result.success(content)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

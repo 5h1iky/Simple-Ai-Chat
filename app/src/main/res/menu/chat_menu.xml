@@ -36,6 +36,16 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_archive_memory"
+        android:title="封存记忆到角色卡"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_import_chat_log"
+        android:title="导入酒馆聊天记录"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_search"
         android:icon="@drawable/ic_search"
         android:title="搜索"

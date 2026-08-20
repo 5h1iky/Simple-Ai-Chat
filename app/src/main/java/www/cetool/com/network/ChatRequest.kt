@@ -9,7 +9,8 @@ data class ChatRequest(
     val messages: List<MessageItem>,
     val temperature: Double? = 0.7,
     val stream: Boolean = true,
-    val reasoning_effort: String? = null
+    val reasoning_effort: String? = null,
+    val max_tokens: Int? = null
 )
 
 data class MessageItem(

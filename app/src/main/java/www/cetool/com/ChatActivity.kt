@@ -38,14 +38,16 @@ import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
-import io.noties.markwon.Markwon
-import www.cetool.com.adapter.MessageAdapter
+import www.cetool.com.importer.STChatLogImporter
 import www.cetool.com.importer.TavernCardImporter
+import www.cetool.com.importer.WorldInfoImporter
 import www.cetool.com.manager.CharacterManager
+import www.cetool.com.manager.MemoryArchiver
 import com.google.gson.Gson
 import www.cetool.com.manager.WorldInfoManager
 import www.cetool.com.SettingsKeys
 import www.cetool.com.model.ApiConfig
+import www.cetool.com.model.CharacterFields
 import www.cetool.com.model.Conversation
 import www.cetool.com.model.Message
 import www.cetool.com.model.Message.Companion.ATTACH_TYPE_IMAGE
@@ -58,7 +60,11 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var fabDrawer: FloatingActionButton
     private lateinit var ibMenu: ImageButton
     private lateinit var tvChatTitle: TextView
-    private lateinit var rvMessages: RecyclerView
+    private lateinit var messagesComposeView: androidx.compose.ui.platform.ComposeView
+    private lateinit var adventureChipBar: android.widget.LinearLayout
+    private lateinit var chipLanguage: com.google.android.material.chip.Chip
+    private lateinit var chipAction: com.google.android.material.chip.Chip
+    private lateinit var chipPlot: com.google.android.material.chip.Chip
     private lateinit var etInput: TextInputEditText
     private lateinit var btnSend: MaterialButton
     private lateinit var btnAttach: ImageButton
@@ -67,7 +73,17 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var tvEmptyState: TextView
     private lateinit var tvModelInfo: TextView
 
-    private lateinit var adapter: MessageAdapter
+    // ─── 消息列表状态（Compose，1.3 迁移） ───
+    private val messagesState = androidx.compose.runtime.mutableStateOf<List<Message>>(emptyList())
+    private val characterAvatarState = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val userAvatarState = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val aiNameState = androidx.compose.runtime.mutableStateOf("AI")
+    private val fontSizeState = androidx.compose.runtime.mutableStateOf(15)
+    private val systemPromptState = androidx.compose.runtime.mutableStateOf("")
+    private val bindingCharacterState = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val bindingWorldState = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val scrollTargetState = androidx.compose.runtime.mutableStateOf<Int?>(null)
+
     private lateinit var apiConfig: ApiConfig
     private lateinit var rootLayout: ConstraintLayout
 
@@ -85,9 +101,9 @@ class ChatActivity : AppCompatActivity() {
 
     private var activeNavId = R.id.nav_new_chat
     private val navIds = listOf(
-        R.id.nav_new_chat, R.id.nav_roleplay, R.id.nav_import, R.id.nav_manage, R.id.nav_create,
+        R.id.nav_new_chat, R.id.nav_roleplay, R.id.nav_adventure, R.id.nav_import, R.id.nav_manage, R.id.nav_create,
         R.id.nav_world_info, R.id.nav_manage_world, R.id.nav_import_world, R.id.nav_create_world,
-        R.id.nav_settings, R.id.nav_about, R.id.nav_crash_test
+        R.id.nav_bond, R.id.nav_settings, R.id.nav_about, R.id.nav_crash_test
     )
 
     private lateinit var rvConversations: RecyclerView
@@ -105,6 +121,37 @@ class ChatActivity : AppCompatActivity() {
         if (uri != null) handleCharacterImport(uri)
     }
 
+    private val chatLogImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) handleChatLogImport(uri)
+    }
+
+    private fun handleChatLogImport(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return
+            val jsonl = inputStream.bufferedReader().use { it.readText() }
+            val result = STChatLogImporter.parse(jsonl)
+            result.fold(
+                onSuccess = { messages ->
+                    val conv = ConversationManager.createNew()
+                    conv.title = "导入的对话"
+                    conv.messages.clear()
+                    conv.messages.addAll(messages)
+                    conv.updatedAt = messages.lastOrNull()?.timestamp ?: System.currentTimeMillis()
+                    ConversationManager.save()
+                    refreshCurrentConversation()
+                    Toast.makeText(this, "已导入 ${messages.size} 条消息", Toast.LENGTH_SHORT).show()
+                },
+                onFailure = { e ->
+                    Toast.makeText(this, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                }
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
@@ -114,7 +161,11 @@ class ChatActivity : AppCompatActivity() {
         ibMenu = findViewById(R.id.ibMenu)
         tvChatTitle = findViewById(R.id.tvChatTitle)
         rootLayout = findViewById(R.id.rootLayout)
-        rvMessages = findViewById(R.id.rvMessages)
+        messagesComposeView = findViewById(R.id.messagesComposeView)
+        adventureChipBar = findViewById(R.id.adventureChipBar)
+        chipLanguage = findViewById(R.id.chipLanguage)
+        chipAction = findViewById(R.id.chipAction)
+        chipPlot = findViewById(R.id.chipPlot)
         etInput = findViewById(R.id.etInput)
         btnSend = findViewById(R.id.btnSend)
         btnAttach = findViewById(R.id.btnAttach)
@@ -158,13 +209,39 @@ class ChatActivity : AppCompatActivity() {
             }
         })
 
-        val markwon = Markwon.builder(this).usePlugin(NoItalicPlugin()).build()
-        adapter = MessageAdapter(mutableListOf(), markwon)
-        rvMessages.layoutManager = LinearLayoutManager(this)
-        rvMessages.adapter = adapter
+        // 消息列表（Compose，1.3）：替代 RecyclerView + MessageAdapter
+        messagesComposeView.setContent {
+            www.cetool.com.ui.theme.SAChatTheme {
+                www.cetool.com.ui.components.MessageList(
+                    messages = messagesState.value,
+                    characterAvatar = characterAvatarState.value,
+                    userAvatar = userAvatarState.value,
+                    aiName = aiNameState.value,
+                    fontSize = fontSizeState.value,
+                    systemPromptPreview = systemPromptState.value,
+                    bindingCharacterName = bindingCharacterState.value,
+                    bindingWorldName = bindingWorldState.value,
+                    scrollTarget = scrollTargetState.value,
+                    onClearScrollTarget = { scrollTargetState.value = null },
+                    onCharacterBindingClick = {
+                        characterListLauncher.launch(Intent(this, CharacterListActivity::class.java))
+                    },
+                    onWorldBindingClick = {
+                        worldInfoListLauncher.launch(Intent(this, WorldInfoListActivity::class.java))
+                    },
+                    onCardClick = { cardId ->
+                        // 聊天内角色卡标记：打开角色编辑查看
+                        val intent = Intent(this, CharacterEditActivity::class.java)
+                        intent.putExtra("character_id", cardId)
+                        startActivity(intent)
+                    }
+                )
+            }
+        }
 
         btnSend.setOnClickListener { sendMessage() }
         btnAttach.setOnClickListener { showFilePicker() }
+        setupAdventureChips()
         fabDrawer.setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
         ibMenu.setOnClickListener { showPopupMenu() }
 
@@ -177,11 +254,8 @@ class ChatActivity : AppCompatActivity() {
         ConversationManager.onCurrentMessageUpdated = { convId ->
             runOnUiThread {
                 if (convId == currentConversation?.id) {
-                    val conv = currentConversation ?: return@runOnUiThread
-                    val lastIndex = conv.messages.size - 1
-                    if (lastIndex >= 0) {
-                        adapter.syncMessageAt(lastIndex, conv.messages[lastIndex])
-                        rvMessages.post { rvMessages.scrollToPosition(lastIndex) }
+                    currentConversation?.let { conv ->
+                        messagesState.value = conv.messages.toList()
                     }
                 }
             }
@@ -212,9 +286,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun setupDrawer() {
-        // 分组默认收起：角色卡、世界书；其他默认展开
+        // 分组默认收起：角色卡、世界书、记录；其他默认展开
         setupDrawerGroup(R.id.headerRoleplay, R.id.groupRoleplay, R.id.chevRoleplay, expanded = false)
         setupDrawerGroup(R.id.headerWorld, R.id.groupWorld, R.id.chevWorld, expanded = false)
+        setupDrawerGroup(R.id.headerRecords, R.id.groupRecords, R.id.chevRecords, expanded = false)
         setupDrawerGroup(R.id.headerOther, R.id.groupOther, R.id.chevOther, expanded = true)
 
         for (id in navIds) {
@@ -335,20 +410,29 @@ class ChatActivity : AppCompatActivity() {
                 true
             }
             R.id.nav_roleplay -> {
-                showCharacterSelectDialog()
+                // 角色扮演：Compose 角色卡片列表选择
+                characterListLauncher.launch(Intent(this, CharacterListActivity::class.java))
+                true
+            }
+            R.id.nav_adventure -> {
+                // 文字冒险（2.2）：配置页 → DM 对话
+                adventureLauncher.launch(Intent(this, AdventureActivity::class.java))
                 true
             }
             R.id.nav_world_info -> {
-                showWorldInfoSelectDialog()
+                // 世界书：Compose 卡片列表选择
+                worldInfoListLauncher.launch(Intent(this, WorldInfoListActivity::class.java))
                 true
             }
             R.id.nav_manage_world -> {
-                showWorldInfoManageDialog()
+                worldInfoListLauncher.launch(
+                    Intent(this, WorldInfoListActivity::class.java).putExtra("manage_mode", true)
+                )
                 true
             }
             R.id.nav_create_world -> {
-                val intent = Intent(this, CreateWorldInfoActivity::class.java)
-                createWorldInfoLauncher.launch(intent)
+                selectWorldOnReturn = true
+                worldInfoEditLauncher.launch(Intent(this, WorldInfoEditActivity::class.java))
                 true
             }
             R.id.nav_import_world -> {
@@ -360,12 +444,17 @@ class ChatActivity : AppCompatActivity() {
                 true
             }
             R.id.nav_manage -> {
-                showCharacterManageDialog()
+                characterListLauncher.launch(
+                    Intent(this, CharacterListActivity::class.java).putExtra("manage_mode", true)
+                )
                 true
             }
             R.id.nav_create -> {
-                val intent = Intent(this, CreateCharacterActivity::class.java)
-                createCharacterLauncher.launch(intent)
+                characterEditLauncher.launch(Intent(this, CharacterEditActivity::class.java))
+                true
+            }
+            R.id.nav_bond -> {
+                startActivity(Intent(this, BondActivity::class.java))
                 true
             }
             R.id.nav_settings -> {
@@ -383,7 +472,9 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private val createWorldInfoLauncher = registerForActivityResult(
+    private var selectWorldOnReturn = false
+
+    private val worldInfoListLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -394,13 +485,85 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private val worldInfoEditLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val wid = result.data?.getStringExtra("world_info_id")
+            if (wid != null && selectWorldOnReturn) {
+                selectWorldInfo(wid)
+            }
+            selectWorldOnReturn = false
+        }
+    }
+
     private val worldInfoImportLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) handleWorldInfoImport(uri)
     }
 
-    private val createCharacterLauncher = registerForActivityResult(
+    private val characterListLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val characterId = result.data?.getStringExtra("character_id")
+            if (characterId != null) {
+                startCharacterConversation(characterId)
+            }
+        }
+    }
+
+    // ─── 文字冒险（2.2） ──────────────────────────────────────────
+
+    private val adventureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data ?: return@registerForActivityResult
+            val worldId = data.getStringExtra("world_info_id")
+            val roleIds = data.getStringArrayListExtra("role_ids") ?: emptyList()
+            val opening = data.getStringExtra("opening") ?: ""
+            startAdventureConversation(worldId, roleIds, opening)
+        }
+    }
+
+    private fun startAdventureConversation(worldId: String?, roleIds: List<String>, opening: String) {
+        if (roleIds.isEmpty()) return
+        val worldName = worldId?.let { WorldInfoManager.load(this, it)?.name } ?: ""
+        val conv = ConversationManager.createNew()
+        conv.title = if (worldName.isNotBlank()) "冒险: $worldName" else "文字冒险"
+        conv.worldInfoId = worldId
+        conv.adventureRoleIds = roleIds
+        conv.systemPrompt = ConversationManager.ADVENTURE_DM_PROMPT
+        ConversationManager.save()
+        refreshCurrentConversation()
+        if (opening.isNotBlank()) {
+            etInput.setText(opening)
+            sendMessage()
+        }
+    }
+
+    private fun setupAdventureChips() {
+        chipLanguage.setOnClickListener { insertAdventurePrefix("[语言] ") }
+        chipAction.setOnClickListener { insertAdventurePrefix("[行为] ") }
+        chipPlot.setOnClickListener { insertAdventurePrefix("[剧情] ") }
+    }
+
+    private fun insertAdventurePrefix(prefix: String) {
+        val text = etInput.text?.toString().orEmpty()
+        val newText = if (text.isBlank()) prefix else "$text\n$prefix"
+        etInput.setText(newText)
+        etInput.setSelection(newText.length)
+        etInput.requestFocus()
+    }
+
+    private fun updateAdventureChipBar() {
+        val isAdventure = currentConversation?.adventureRoleIds?.isNotEmpty() == true
+        adventureChipBar.visibility = if (isAdventure) View.VISIBLE else View.GONE
+    }
+
+    private val characterEditLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -420,36 +583,6 @@ class ChatActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.toast_conversation_created, Toast.LENGTH_SHORT).show()
     }
 
-    private fun showCharacterSelectDialog() {
-        val chars = CharacterManager.list(this)
-        if (chars.isEmpty()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("角色扮演")
-                .setMessage("暂无角色卡，请先导入或创建一个角色。")
-                .setPositiveButton("导入角色卡") { _, _ ->
-                    jsonImportLauncher.launch(arrayOf("application/json", "*/*"))
-                }
-                .setNeutralButton("创建角色卡") { _, _ ->
-                    val intent = Intent(this, CreateCharacterActivity::class.java)
-                    createCharacterLauncher.launch(intent)
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-            return
-        }
-
-        val items = chars.map { it.name }.toTypedArray()
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle("选择角色")
-            .setItems(items) { _, which ->
-                val characterId = chars[which].id
-                startCharacterConversation(characterId)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
     private fun startCharacterConversation(characterId: String) {
         val card = CharacterManager.loadCard(this, characterId) ?: return
 
@@ -466,39 +599,6 @@ class ChatActivity : AppCompatActivity() {
 
         ConversationManager.save()
         refreshCurrentConversation()
-    }
-
-    private fun showCharacterManageDialog() {
-        val chars = CharacterManager.list(this)
-        if (chars.isEmpty()) {
-            Toast.makeText(this, "暂无角色卡", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val names = chars.map { it.name }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle("角色管理")
-            .setItems(names) { _, which ->
-                val char = chars[which]
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(char.name)
-                    .setMessage(char.description.ifBlank { "无描述" })
-                    .setPositiveButton("开始聊天") { _, _ ->
-                        startCharacterConversation(char.id)
-                    }
-                    .setNeutralButton("编辑") { _, _ ->
-                        val intent = Intent(this, CreateCharacterActivity::class.java)
-                        intent.putExtra("character_id", char.id)
-                        createCharacterLauncher.launch(intent)
-                    }
-                    .setNegativeButton("删除") { _, _ ->
-                        CharacterManager.delete(this, char.id)
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
-                    }
-                    .show()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 
     private fun handleCharacterImport(uri: Uri) {
@@ -545,36 +645,6 @@ class ChatActivity : AppCompatActivity() {
 
     // ─── 世界书 ──────────────────────────────────────────────────
 
-    private fun showWorldInfoSelectDialog() {
-        val list = WorldInfoManager.list(this)
-        if (list.isEmpty()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("世界书")
-                .setMessage("暂无世界书，请先创建一个。")
-                .setPositiveButton("创建") { _, _ ->
-                    startActivity(Intent(this, CreateWorldInfoActivity::class.java))
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-            return
-        }
-
-        val names = list.map { it.name }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle("选择世界书")
-            .setItems(names) { _, which ->
-                selectWorldInfo(list[which].id)
-            }
-            .setNegativeButton("取消世界书") { _, _ ->
-                currentConversation?.let { conv ->
-                    conv.worldInfoId = null
-                    ConversationManager.save()
-                    updateWorldInfoIndicator()
-                }
-            }
-            .show()
-    }
-
     private fun selectWorldInfo(id: String) {
         val conv = currentConversation ?: return
         conv.worldInfoId = id
@@ -601,16 +671,28 @@ class ChatActivity : AppCompatActivity() {
             if (base64 != null) {
                 try {
                     val bytes = Base64.decode(base64, Base64.DEFAULT)
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+                    // 用屏幕尺寸而非 rootLayout 尺寸（onCreate 阶段尚未测量，旧实现取到 0 导致背景失效）
+                    val dm = resources.displayMetrics
+                    val screenW = dm.widthPixels.coerceAtLeast(1)
+                    val screenH = dm.heightPixels.coerceAtLeast(1)
                     val scale = sp.getString(SettingsKeys.KEY_BG_SCALE, "fit") ?: "fit"
                     if (scale == "fit") {
-                        rootLayout.background = BitmapDrawable(resources, Bitmap.createScaledBitmap(bitmap, rootLayout.width.coerceAtLeast(1), rootLayout.height.coerceAtLeast(1), true))
+                        // 适应：等比缩放裁剪填满屏幕（cover），不变形不拉伸
+                        rootLayout.background = BitmapDrawable(resources, centerCrop(bitmap, screenW, screenH))
                     } else {
-                        val drawable = BitmapDrawable(resources, bitmap).apply {
+                        // 保持原比例：不足屏宽则等比放大到屏宽，再平铺（避免原图过小）
+                        val factor = if (bitmap.width < screenW) screenW.toFloat() / bitmap.width else 1f
+                        val scaled = Bitmap.createScaledBitmap(
+                            bitmap,
+                            (bitmap.width * factor).toInt().coerceAtLeast(1),
+                            (bitmap.height * factor).toInt().coerceAtLeast(1),
+                            true
+                        )
+                        BitmapDrawable(resources, scaled).apply {
                             tileModeX = android.graphics.Shader.TileMode.REPEAT
                             tileModeY = android.graphics.Shader.TileMode.REPEAT
-                        }
-                        rootLayout.background = drawable
+                        }.let { rootLayout.background = it }
                     }
                 } catch (_: Exception) {}
             }
@@ -620,47 +702,40 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun showWorldInfoManageDialog() {
-        val list = WorldInfoManager.list(this)
-        if (list.isEmpty()) {
-            Toast.makeText(this, "暂无世界书", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val names = list.map { it.name }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle("世界书管理")
-            .setItems(names) { _, which ->
-                val wi = list[which]
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(wi.name)
-                    .setMessage("条目: ${wi.entryCount} | ${if (wi.enabled) "已启用" else "已禁用"}")
-                    .setPositiveButton("编辑") { _, _ ->
-                        val intent = Intent(this, CreateWorldInfoActivity::class.java)
-                        intent.putExtra("world_info_id", wi.id)
-                        startActivity(intent)
-                    }
-                    .setNeutralButton("删除") { _, _ ->
-                        WorldInfoManager.delete(this, wi.id)
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton(R.string.cancel, null)
-                    .show()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+    /** 等比缩放 + 居中裁剪（cover） */
+    private fun centerCrop(src: android.graphics.Bitmap, targetW: Int, targetH: Int): android.graphics.Bitmap {
+        val scale = maxOf(targetW.toFloat() / src.width, targetH.toFloat() / src.height)
+        val scaledW = (src.width * scale).toInt().coerceAtLeast(1)
+        val scaledH = (src.height * scale).toInt().coerceAtLeast(1)
+        val scaled = android.graphics.Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+        val x = ((scaledW - targetW) / 2).coerceAtLeast(0)
+        val y = ((scaledH - targetH) / 2).coerceAtLeast(0)
+        val w = minOf(targetW, scaledW - x)
+        val h = minOf(targetH, scaledH - y)
+        return android.graphics.Bitmap.createBitmap(scaled, x, y, w, h)
     }
 
     private fun handleWorldInfoImport(uri: Uri) {
         try {
             val inputStream = contentResolver.openInputStream(uri) ?: return
             val json = inputStream.bufferedReader().use { it.readText() }
-            val info = Gson().fromJson(json, www.cetool.com.model.WorldInfo::class.java)
-            if (info.name.isBlank()) {
-                Toast.makeText(this, "无效的世界书文件", Toast.LENGTH_SHORT).show()
-                return
+            when (val result = WorldInfoImporter.parse(json)) {
+                is WorldInfoImporter.ImportResult.Success -> {
+                    WorldInfoManager.saveNew(this, result.info)
+                    val warnText = if (result.warnings.isNotEmpty()) "（${result.warnings.size} 条警告）" else ""
+                    Toast.makeText(this, "世界书「${result.info.name}」已导入$warnText", Toast.LENGTH_SHORT).show()
+                    if (result.warnings.isNotEmpty()) {
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("导入完成（部分条目被跳过）")
+                            .setMessage(result.warnings.take(5).joinToString("\n"))
+                            .setPositiveButton("知道了", null)
+                            .show()
+                    }
+                }
+                is WorldInfoImporter.ImportResult.Failure -> {
+                    Toast.makeText(this, "导入失败：${result.message}", Toast.LENGTH_LONG).show()
+                }
             }
-            WorldInfoManager.saveNew(this, info)
-            Toast.makeText(this, "世界书「${info.name}」已导入", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -697,6 +772,10 @@ class ChatActivity : AppCompatActivity() {
                 R.id.action_new_conversation -> startNewConversation()
                 R.id.action_settings -> startActivity(Intent(this, SettingsActivity::class.java))
                 R.id.action_retry -> retryLastMessage()
+                R.id.action_archive_memory -> handleArchiveMemory()
+                R.id.action_import_chat_log -> {
+                    chatLogImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }
                 R.id.action_toggle_web_search -> {
                     webSearchEnabled = !webSearchEnabled
                     getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -717,7 +796,7 @@ class ChatActivity : AppCompatActivity() {
                 R.id.action_edit_system_prompt -> showEditSystemPromptDialog()
                 R.id.action_clear -> {
                     currentConversation?.messages?.clear()
-                    adapter.notifyDataSetChanged()
+                    messagesState.value = emptyList()
                     ConversationManager.save()
                 }
                 R.id.action_delete_conversation -> showDeleteConversationDialog()
@@ -725,6 +804,151 @@ class ChatActivity : AppCompatActivity() {
             true
         }
         popup.show()
+    }
+
+    // ─── 记忆封存（1.4） ──────────────────────────────────────────
+
+    private fun handleArchiveMemory() {
+        val conv = currentConversation ?: return
+        if (conv.isStreaming) {
+            Toast.makeText(this, "等待回复完成后再封存", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (conv.isArchived) {
+            Toast.makeText(this, "本会话记忆已封存", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val characterId = conv.characterId
+        if (characterId == null) {
+            Toast.makeText(this, "请先绑定角色卡再封存记忆", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val card = CharacterManager.loadCard(this, characterId)
+        if (card == null) {
+            Toast.makeText(this, "角色卡不存在", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (conv.messages.none { it.role == Message.ROLE_USER }) {
+            Toast.makeText(this, "还没有可分析的对话内容", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setMessage("正在分析对话，提炼角色记忆…")
+            setCancelable(false)
+        }
+        progressDialog.show()
+
+        val prefs = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        val providerMode = prefs.getString(SettingsKeys.KEY_PROVIDER_MODE, SettingsKeys.PROVIDER_CUSTOM)
+            ?: SettingsKeys.PROVIDER_CUSTOM
+        val kiloModel = prefs.getString(SettingsKeys.KEY_KILO_MODEL, SettingsKeys.KILO_MODEL)
+            ?: SettingsKeys.KILO_MODEL
+        val zenModel = prefs.getString(SettingsKeys.KEY_ZEN_MODEL, SettingsKeys.ZEN_MODEL_DEFAULT)
+            ?: SettingsKeys.ZEN_MODEL_DEFAULT
+
+        Thread {
+            val result = MemoryArchiver.analyze(
+                apiConfig = apiConfig,
+                conversation = conv,
+                card = card,
+                thinkingLevel = if (thinkingEnabled) thinkingLevel else null,
+                providerMode = providerMode,
+                kiloModelOption = kiloModel,
+                zenModelOption = zenModel
+            )
+            runOnUiThread {
+                progressDialog.dismiss()
+                result.fold(
+                    onSuccess = { archive -> showArchiveConfirmDialog(conv, archive) },
+                    onFailure = { e ->
+                        Toast.makeText(this, "记忆分析失败：${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                )
+            }
+        }.start()
+    }
+
+    private fun showArchiveConfirmDialog(
+        conv: Conversation,
+        archive: MemoryArchiver.ArchiveResult
+    ) {
+        val currentCard = CharacterManager.loadCard(this, conv.characterId!!)
+        if (currentCard == null) {
+            Toast.makeText(this, "角色卡加载失败，无法封存", Toast.LENGTH_LONG).show()
+            return
+        }
+        val fields = currentCard.data.getCharacterFields()
+
+        val view = layoutInflater.inflate(R.layout.dialog_archive_confirm, null)
+        val etTitle = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etArchiveTitle)
+        val etRelationType = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etArchiveRelationType)
+        val etInteraction = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etArchiveInteractionModel)
+        val etBottomLine = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etArchiveBottomLine)
+        val etKeyEvents = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etArchiveKeyEvents)
+
+        etTitle.setText(archive.sessionTitle.ifBlank { conv.title })
+        etRelationType.setText(archive.userRelationType.ifBlank { fields.userRelationType })
+        etInteraction.setText(archive.userInteractionModel.ifBlank { fields.userInteractionModel })
+        etBottomLine.setText(archive.userRelationBottomLine.ifBlank { fields.userRelationBottomLine })
+        // 关键事件：新事件在前 + 已有事件追加在后
+        val mergedEvents = listOf(archive.keyEvents.trim(), fields.keyEvents.trim())
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+        etKeyEvents.setText(mergedEvents)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("记忆封存确认")
+            .setView(view)
+            .setPositiveButton("确认写入") { _, _ ->
+                val updated = CharacterFields(
+                    age = fields.age, gender = fields.gender, race = fields.race,
+                    birthplace = fields.birthplace, occupation = fields.occupation, socialClass = fields.socialClass,
+                    identityTags = fields.identityTags,
+                    heightBuild = fields.heightBuild, iconicFeatures = fields.iconicFeatures,
+                    clothingStyle = fields.clothingStyle, overallVibe = fields.overallVibe,
+                    externalPersonality = fields.externalPersonality, internalPersonality = fields.internalPersonality,
+                    coreDesire = fields.coreDesire, fearWeakness = fields.fearWeakness,
+                    moralValues = fields.moralValues, quirk = fields.quirk,
+                    skills = fields.skills, backgroundStory = fields.backgroundStory,
+                    relationships = fields.relationships, speakingStyle = fields.speakingStyle,
+                    typicalReactions = fields.typicalReactions,
+                    userRelationType = etRelationType.text?.toString()?.trim() ?: "",
+                    userInteractionModel = etInteraction.text?.toString()?.trim() ?: "",
+                    userRelationBottomLine = etBottomLine.text?.toString()?.trim() ?: "",
+                    keyEvents = etKeyEvents.text?.toString()?.trim() ?: ""
+                )
+                applyArchive(conv, currentCard, updated, etTitle.text?.toString()?.trim().orEmpty())
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun applyArchive(
+        conv: Conversation,
+        card: www.cetool.com.model.TavernCard,
+        fields: www.cetool.com.model.CharacterFields,
+        newTitle: String
+    ) {
+        val newData = card.data.withCharacterFields(fields)
+        val newCard = www.cetool.com.model.TavernCard(
+            spec = card.spec,
+            spec_version = card.spec_version,
+            data = newData,
+            avatarBase64 = card.avatarBase64
+        )
+        val json = com.google.gson.Gson().toJson(newCard)
+        val ok = CharacterManager.overwrite(this, conv.characterId!!, json)
+
+        if (ok) {
+            conv.isArchived = true
+            if (newTitle.isNotBlank()) conv.title = newTitle
+            ConversationManager.save()
+            refreshCurrentConversation()
+            Toast.makeText(this, "记忆已封存到角色卡，会话已锁定", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "写回角色卡失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showThinkingLevelDialog() {
@@ -761,25 +985,30 @@ class ChatActivity : AppCompatActivity() {
         streamingProgress.visibility = if (conv.isStreaming) View.VISIBLE else View.GONE
         tvChatTitle.text = conv.title
 
+        val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+
         if (conv.characterId != null) {
             val card = CharacterManager.loadCard(this, conv.characterId!!)
-            adapter.characterAvatarBase64 = card?.avatarBase64
+            characterAvatarState.value = card?.avatarBase64
+            bindingCharacterState.value = card?.data?.name
         } else {
-            val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-            adapter.characterAvatarBase64 = sp.getString(SettingsKeys.KEY_AI_AVATAR, null)
+            characterAvatarState.value = sp.getString(SettingsKeys.KEY_AI_AVATAR, null)
+            bindingCharacterState.value = null
         }
 
-        val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        adapter.userAvatarBase64 = sp.getString(SettingsKeys.KEY_USER_AVATAR, null)
+        userAvatarState.value = sp.getString(SettingsKeys.KEY_USER_AVATAR, null)
+        aiNameState.value = sp.getString(SettingsKeys.KEY_AI_NAME, "AI") ?: "AI"
+        fontSizeState.value = sp.getInt(SettingsKeys.KEY_FONT_SIZE, 15)
+
+        bindingWorldState.value = conv.worldInfoId?.let { WorldInfoManager.load(this, it)?.name }
+        systemPromptState.value = conv.systemPrompt
+        updateAdventureChipBar()
 
         val isEmpty = conv.messages.isEmpty()
         tvEmptyState.visibility = if (isEmpty) View.VISIBLE else View.GONE
-        rvMessages.visibility = if (isEmpty) View.GONE else View.VISIBLE
+        messagesComposeView.visibility = if (isEmpty) View.GONE else View.VISIBLE
         if (!isEmpty) {
-            if (adapter.itemCount != conv.messages.size) {
-                adapter.updateMessages(conv.messages)
-            }
-            rvMessages.post { rvMessages.scrollToPosition(adapter.itemCount - 1) }
+            messagesState.value = conv.messages.toList()
         }
     }
 
@@ -879,7 +1108,7 @@ class ChatActivity : AppCompatActivity() {
                     .setTitle("找到 ${matches.size} 条匹配")
                     .setItems(labels) { _, which ->
                         val position = matches[which].second
-                        rvMessages.smoothScrollToPosition(position)
+                        scrollTargetState.value = position
                     }
                     .setPositiveButton(R.string.cancel, null)
                     .show()
@@ -966,7 +1195,7 @@ class ChatActivity : AppCompatActivity() {
 
         conv.messages.removeAt(conv.messages.size - 1)
         conv.messages.removeAt(lastUserIdx)
-        adapter.notifyDataSetChanged()
+        messagesState.value = conv.messages.toList()
         performSend(lastUserText)
     }
 
