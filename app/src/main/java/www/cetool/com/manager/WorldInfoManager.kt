@@ -74,7 +74,29 @@ object WorldInfoManager {
                     useRegex = obj.get("useRegex")?.asBoolean ?: false,
                     caseSensitive = obj.get("caseSensitive")?.asBoolean ?: false,
                     scanDepth = obj.get("scanDepth")?.asInt ?: 4,
-                    constantActive = obj.get("constantActive")?.asBoolean ?: false
+                    constantActive = obj.get("constantActive")?.asBoolean ?: false,
+                    stPosition = obj.get("stPosition")?.asInt ?: -1,
+                    wholeWords = obj.get("wholeWords")?.asBoolean ?: true,
+                    secondaryKeys = obj.getAsJsonArray("secondaryKeys")?.map { it.asString }?.toMutableList() ?: mutableListOf(),
+                    selective = obj.get("selective")?.asBoolean ?: false,
+                    selectiveLogic = obj.get("selectiveLogic")?.asInt ?: 0,
+                    probability = obj.get("probability")?.asInt ?: 100,
+                    useProbability = obj.get("useProbability")?.asBoolean ?: false,
+                    groupName = obj.get("groupName")?.asString ?: "",
+                    groupWeight = obj.get("groupWeight")?.asInt ?: 100,
+                    excludeRecursion = obj.get("excludeRecursion")?.asBoolean ?: false,
+                    preventRecursion = obj.get("preventRecursion")?.asBoolean ?: false,
+                    delayUntilRecursion = obj.get("delayUntilRecursion")?.asBoolean ?: false,
+                    automationId = obj.get("automationId")?.asString ?: "",
+                    score = obj.get("score")?.asInt ?: 0,
+                    sticky = obj.get("sticky")?.asInt ?: 0,
+                    cooldown = obj.get("cooldown")?.asInt ?: 0,
+                    delay = obj.get("delay")?.asInt ?: 0,
+                    displayIndex = obj.get("displayIndex")?.asInt ?: 0,
+                    comment = obj.get("comment")?.asString ?: "",
+                    vectorized = obj.get("vectorized")?.asBoolean ?: false,
+                    triggers = obj.getAsJsonArray("triggers")?.map { it.asString }?.toMutableList() ?: mutableListOf(),
+                    injectRole = obj.get("injectRole")?.asString
                 )
                 entries.add(entry)
             } catch (_: Exception) {}
@@ -83,8 +105,10 @@ object WorldInfoManager {
     }
 
     fun saveNew(context: Context, info: WorldInfo): String {
-        val id = info.id
-        val json = buildJson(info)
+        // 防呆：id 为空时重新生成（旧实现曾把缺失 id 写成 "null.json" 互相覆盖）
+        val id = if (info.id.isNullOrBlank()) java.util.UUID.randomUUID().toString().take(8) else info.id
+        val safe = info.copy(id = id)
+        val json = buildJson(safe)
         val file = File(getDir(context), "$id.json")
         file.writeText(json)
         return id
@@ -128,6 +152,33 @@ object WorldInfoManager {
             obj.addProperty("caseSensitive", entry.caseSensitive)
             obj.addProperty("scanDepth", entry.scanDepth)
             obj.addProperty("constantActive", entry.constantActive)
+            // ─── 酒馆对标字段往返保存 ───
+            obj.addProperty("stPosition", entry.stPosition)
+            obj.addProperty("wholeWords", entry.wholeWords)
+            obj.add("secondaryKeys", entry.secondaryKeys?.let { arr ->
+                val ja = com.google.gson.JsonArray(); arr.forEach { ja.add(it) }; ja
+            } ?: com.google.gson.JsonArray())
+            obj.addProperty("selective", entry.selective)
+            obj.addProperty("selectiveLogic", entry.selectiveLogic)
+            obj.addProperty("probability", entry.probability)
+            obj.addProperty("useProbability", entry.useProbability)
+            obj.addProperty("groupName", entry.groupName)
+            obj.addProperty("groupWeight", entry.groupWeight)
+            obj.addProperty("excludeRecursion", entry.excludeRecursion)
+            obj.addProperty("preventRecursion", entry.preventRecursion)
+            obj.addProperty("delayUntilRecursion", entry.delayUntilRecursion)
+            obj.addProperty("automationId", entry.automationId)
+            obj.addProperty("score", entry.score)
+            obj.addProperty("sticky", entry.sticky)
+            obj.addProperty("cooldown", entry.cooldown)
+            obj.addProperty("delay", entry.delay)
+            obj.addProperty("displayIndex", entry.displayIndex)
+            obj.addProperty("comment", entry.comment)
+            obj.addProperty("vectorized", entry.vectorized)
+            obj.add("triggers", entry.triggers?.let { arr ->
+                val ja = com.google.gson.JsonArray(); arr.forEach { ja.add(it) }; ja
+            } ?: com.google.gson.JsonArray())
+            if (entry.injectRole != null) obj.addProperty("injectRole", entry.injectRole)
             entries.add(obj)
         }
         data.add("entries", entries)

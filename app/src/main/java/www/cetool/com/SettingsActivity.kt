@@ -27,6 +27,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import www.cetool.com.manager.WorldInfoEngine
 import www.cetool.com.model.ApiConfig
 import java.io.ByteArrayOutputStream
 
@@ -53,6 +54,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvFontPreview: TextView
     private lateinit var etSystemPrompt: TextInputEditText
     private lateinit var etMaxHistory: TextInputEditText
+    private lateinit var etWorldBudget: TextInputEditText
     private lateinit var etWebSearchUrl: TextInputEditText
     private lateinit var rgBgMode: RadioGroup
     private lateinit var rbBgColor: RadioButton
@@ -106,6 +108,7 @@ class SettingsActivity : AppCompatActivity() {
         tvFontPreview = findViewById(R.id.tvFontPreview)
         etSystemPrompt = findViewById(R.id.etSystemPrompt)
         etMaxHistory = findViewById(R.id.etMaxHistory)
+        etWorldBudget = findViewById(R.id.etWorldBudget)
         etWebSearchUrl = findViewById(R.id.etWebSearchUrl)
         rgBgMode = findViewById(R.id.rgBgMode)
         rbBgColor = findViewById(R.id.rbBgColor)
@@ -162,6 +165,7 @@ class SettingsActivity : AppCompatActivity() {
 
         etSystemPrompt.setText(ConversationManager.getDefaultSystemPrompt())
         etMaxHistory.setText(sp.getInt(SettingsKeys.KEY_MAX_HISTORY, www.cetool.com.model.Conversation.MAX_HISTORY).toString())
+        etWorldBudget.setText(sp.getInt(SettingsKeys.KEY_WORLDINFO_BUDGET, WorldInfoEngine.DEFAULT_BUDGET).toString())
         etWebSearchUrl.setText(sp.getString(SettingsKeys.KEY_WEB_SEARCH_URL, ""))
 
         if (bgImageName != null) tvBgImageName.text = bgImageName
@@ -660,6 +664,11 @@ class SettingsActivity : AppCompatActivity() {
                 SettingsKeys.KEY_MAX_HISTORY,
                 (etMaxHistory.text?.toString()?.toIntOrNull() ?: www.cetool.com.model.Conversation.MAX_HISTORY)
                     .coerceIn(SettingsKeys.MAX_HISTORY_MIN, SettingsKeys.MAX_HISTORY_MAX)
+            )
+            putInt(
+                SettingsKeys.KEY_WORLDINFO_BUDGET,
+                (etWorldBudget.text?.toString()?.toIntOrNull() ?: WorldInfoEngine.DEFAULT_BUDGET)
+                    .coerceIn(200, 20000)
             )
             putString(SettingsKeys.KEY_BG_MODE, if (rbBgImage.isChecked) "image" else "color")
             putString(SettingsKeys.KEY_BG_IMAGE, bgImageBase64)

@@ -28,6 +28,9 @@ object SettingsKeys {
     const val KEY_THINKING_ENABLED = "thinking_enabled"
     const val KEY_THINKING_LEVEL = "thinking_level"
 
+    // 世界书 token 预算（酒馆 Context %/Budget 对齐，默认 1500 tokens）
+    const val KEY_WORLDINFO_BUDGET = "worldinfo_budget"
+
     // ─── Free Gateway Integration ──────────────────────────────────
     const val KEY_PROVIDER_MODE = "pref_provider_mode"
     const val KEY_PROVIDER_MANUAL_SNAPSHOT = "pref_provider_manual_snapshot"
