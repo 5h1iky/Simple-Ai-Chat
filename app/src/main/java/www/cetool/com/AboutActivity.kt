@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -63,6 +64,10 @@ import www.cetool.com.ui.theme.SAChatTheme
  */
 class AboutActivity : ComponentActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
+
     private val BILIBILI_URL = "https://space.bilibili.com/432122433"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -113,7 +118,7 @@ private fun AboutScreen(version: String, onFeedback: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "$version · 轻量 AI 聊天",
+            text = stringResource(R.string.about_version_slogan, version),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
@@ -133,8 +138,8 @@ private fun AboutScreen(version: String, onFeedback: () -> Unit) {
             Column {
                 AboutRow(
                     icon = Icons.Filled.AccountCircle,
-                    title = "作者 · 明日awo",
-                    desc = "99% 纯天然 AI 制作",
+                    title = stringResource(R.string.about_author_name),
+                    desc = stringResource(R.string.about_author_desc),
                     onClick = { /* 无跳转 */ }
                 )
                 HorizontalDivider(
@@ -163,8 +168,8 @@ private fun AboutScreen(version: String, onFeedback: () -> Unit) {
                 )
                 AboutRow(
                     icon = Icons.Filled.Description,
-                    title = "开源许可 · MIT",
-                    desc = "可自由使用、修改与分发",
+                    title = stringResource(R.string.about_license),
+                    desc = stringResource(R.string.about_license_desc),
                     onClick = { /* 无跳转 */ }
                 )
             }
@@ -172,7 +177,7 @@ private fun AboutScreen(version: String, onFeedback: () -> Unit) {
 
         Spacer(Modifier.height(40.dp))
         Text(
-            text = "Copyright © 2026 5h1iky",
+            text = stringResource(R.string.about_copyright),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )

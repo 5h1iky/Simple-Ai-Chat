@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import www.cetool.com.manager.CharacterManager
@@ -55,6 +57,10 @@ import www.cetool.com.ui.theme.SAChatTheme
  * 世界书单选 + 角色卡多选 + 开场剧情 → 返回选择给 ChatActivity 开启 DM 对话。
  */
 class AdventureActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,7 +88,7 @@ class AdventureActivity : ComponentActivity() {
                     onBack = { finish() },
                     onStart = {
                         if (selectedRoleIds.isEmpty()) {
-                            Toast.makeText(this, "请至少选择一张角色卡", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.adventure_need_role), Toast.LENGTH_SHORT).show()
                             return@AdventureConfigScreen
                         }
                         val intent = Intent().apply {
@@ -116,14 +122,14 @@ private fun AdventureConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("文字冒险") },
+                title = { Text(stringResource(R.string.adventure_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    TextButton(onClick = onStart) { Text("开始冒险") }
+                    TextButton(onClick = onStart) { Text(stringResource(R.string.adventure_start)) }
                 }
             )
         }
@@ -134,9 +140,9 @@ private fun AdventureConfigScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("世界书（单选，可选）") {
+                SectionCard(stringResource(R.string.adventure_world_group)) {
                     if (worldInfos.isEmpty()) {
-                        Text("暂无世界书", style = MaterialTheme.typography.bodySmall,
+                        Text(stringResource(R.string.adventure_no_world), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     worldInfos.forEach { info ->
@@ -163,9 +169,9 @@ private fun AdventureConfigScreen(
             }
 
             item {
-                SectionCard("角色卡（多选，至少 1 张）") {
+                SectionCard(stringResource(R.string.adventure_role_group)) {
                     if (characters.isEmpty()) {
-                        Text("暂无角色卡，请先创建或导入",
+                        Text(stringResource(R.string.adventure_no_role),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -196,17 +202,17 @@ private fun AdventureConfigScreen(
             }
 
             item {
-                SectionCard("开场剧情") {
+                SectionCard(stringResource(R.string.adventure_opening_group)) {
                     OutlinedTextField(
                         value = opening,
                         onValueChange = onOpeningChange,
-                        label = { Text("输入故事开端（可选）") },
+                        label = { Text(stringResource(R.string.adventure_opening_hint)) },
                         minLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "冒险中可用 [语言] [行为] [剧情] 三种方式输入",
+                        text = stringResource(R.string.adventure_input_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -220,7 +226,7 @@ private fun AdventureConfigScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "已选 ${selectedRoleIds.size} 个角色" +
+                        text = stringResource(R.string.adventure_selected_roles, selectedRoleIds.size) +
                             (selectedWorldId?.let { wid ->
                                 worldInfos.firstOrNull { it.id == wid }?.let { " · ${it.name}" } ?: ""
                             } ?: ""),

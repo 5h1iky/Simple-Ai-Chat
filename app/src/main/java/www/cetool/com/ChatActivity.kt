@@ -140,6 +140,10 @@ import java.io.ByteArrayOutputStream
  */
 class ChatActivity : ComponentActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
+
     // ─── 消息列表状态（1.3 迁移保留） ───
     private val messagesState = androidx.compose.runtime.mutableStateOf<List<Message>>(emptyList())
     private val characterAvatarState = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -153,7 +157,7 @@ class ChatActivity : ComponentActivity() {
 
     // ─── 页面状态（Compose） ───
     private var inputText by mutableStateOf("")
-    private var inputHint by mutableStateOf("输入消息…")
+    private var inputHint by mutableStateOf("")
     private var chatTitle by mutableStateOf("SAChat")
     private var modelInfoText by mutableStateOf<String?>(null)
     private var isStreaming by mutableStateOf(false)
@@ -467,7 +471,7 @@ class ChatActivity : ComponentActivity() {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.ChatBubble,
-                            contentDescription = stringResource(R.string.nav_open),
+                            contentDescription = getString(R.string.nav_open),
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(26.dp)
                         )
@@ -507,7 +511,7 @@ class ChatActivity : ComponentActivity() {
             IconButton(onClick = onMenuClick) {
                 Icon(
                     imageVector = Icons.Filled.Menu,
-                    contentDescription = stringResource(R.string.nav_open),
+                    contentDescription = getString(R.string.nav_open),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -538,7 +542,7 @@ class ChatActivity : ComponentActivity() {
                 IconButton(onClick = { showPopupMenu = true }) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "菜单",
+                        contentDescription = getString(R.string.menu_desc),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -549,30 +553,30 @@ class ChatActivity : ComponentActivity() {
                     // 与左侧抽屉重合的入口（设置/新对话/切换对话/清空/删除）已移入左侧；
                     // 右侧仅保留左侧没有的快捷功能
                     if (webSearchConfigured) {
-                        MenuItem(Icons.Filled.Search, if (webSearchEnabled) "关闭联网搜索" else "开启联网搜索") {
+                        MenuItem(Icons.Filled.Search, if (webSearchEnabled) getString(R.string.menu_web_search_off) else getString(R.string.menu_web_search_on)) {
                             webSearchEnabled = !webSearchEnabled
                             getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                                 .edit().putBoolean(SettingsKeys.KEY_WEB_SEARCH_ENABLED, webSearchEnabled).apply()
-                            Toast.makeText(ctx, if (webSearchEnabled) "联网搜索已开启" else "联网搜索已关闭", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, if (webSearchEnabled) getString(R.string.menu_web_search_off) else getString(R.string.menu_web_search_on), Toast.LENGTH_SHORT).show()
                         }
                     }
-                    MenuItem(Icons.Filled.Tune, if (thinkingEnabled) "深度思考：$thinkingLevel" else "深度思考：关闭") {
+                    MenuItem(Icons.Filled.Tune, if (thinkingEnabled) getString(R.string.menu_thinking_level, thinkingLevel) else getString(R.string.menu_thinking_off)) {
                         if (thinkingEnabled) {
                             thinkingEnabled = false
                             getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                                 .edit().putBoolean(SettingsKeys.KEY_THINKING_ENABLED, false).apply()
-                            Toast.makeText(ctx, "深度思考已关闭", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, getString(R.string.menu_thinking_off), Toast.LENGTH_SHORT).show()
                         } else {
                             showThinkingLevel = true
                         }
                     }
-                    MenuItem(Icons.Filled.Refresh, stringResource(R.string.retry)) { retryLastMessage() }
-                    MenuItem(Icons.Filled.Save, "封存记忆到角色卡") { handleArchiveMemory() }
-                    MenuItem(Icons.Filled.FileOpen, "导入酒馆聊天记录") {
+                    MenuItem(Icons.Filled.Refresh, getString(R.string.menu_retry)) { retryLastMessage() }
+                    MenuItem(Icons.Filled.Save, getString(R.string.menu_archive_memory)) { handleArchiveMemory() }
+                    MenuItem(Icons.Filled.FileOpen, getString(R.string.menu_import_chat_log)) {
                         chatLogImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     }
-                    MenuItem(Icons.Filled.Search, "搜索") { showSearch = true }
-                    MenuItem(Icons.Filled.Edit, stringResource(R.string.edit_system_prompt)) { showEditSystemPrompt = true }
+                    MenuItem(Icons.Filled.Search, getString(R.string.menu_search)) { showSearch = true }
+                    MenuItem(Icons.Filled.Edit, getString(R.string.menu_edit_system_prompt)) { showEditSystemPrompt = true }
                 }
             }
             if (isStreaming) {
@@ -617,13 +621,13 @@ class ChatActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "开始一段对话",
+                text = getString(R.string.chat_empty_title),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "与角色、世界书或冒险模式互动",
+                text = getString(R.string.chat_empty_subtitle),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
@@ -640,15 +644,19 @@ class ChatActivity : ComponentActivity() {
                 .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("语言", "行为", "剧情").forEach { label ->
+            listOf(
+                getString(R.string.adventure_chip_language),
+                getString(R.string.adventure_chip_action),
+                getString(R.string.adventure_chip_plot)
+            ).forEach { label ->
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.clickable { insertAdventurePrefix("[$label] ") }
+                    modifier = Modifier.clickable { insertAdventurePrefix("$label ") }
                 ) {
                     Text(
-                        text = "[$label]",
+                        text = label,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
@@ -677,7 +685,7 @@ class ChatActivity : ComponentActivity() {
                 IconButton(onClick = { showFilePicker() }) {
                     Icon(
                         imageVector = Icons.Filled.AttachFile,
-                        contentDescription = stringResource(R.string.attach_file),
+                        contentDescription = getString(R.string.attach_file),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
@@ -688,7 +696,7 @@ class ChatActivity : ComponentActivity() {
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 40.dp, max = 120.dp),
-                    placeholder = { Text(inputHint, fontSize = 14.sp) },
+                    placeholder = { Text(inputHint.ifBlank { getString(R.string.hint_input) }, fontSize = 14.sp) },
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp),
                     maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -709,7 +717,7 @@ class ChatActivity : ComponentActivity() {
                     onClick = { sendMessage() },
                     shape = RoundedCornerShape(20.dp)
                 ) {
-                    Text(stringResource(R.string.btn_send))
+                    Text(getString(R.string.btn_send))
                 }
             }
         }
@@ -764,7 +772,7 @@ class ChatActivity : ComponentActivity() {
             // 新对话（默认不高亮，点击后高亮）
             DrawerNavItem(
                 icon = Icons.Filled.Add,
-                label = "新对话",
+                label = getString(R.string.drawer_new_chat),
                 selected = activeNavId == "new_chat",
                 indent = false,
                 onClick = {
@@ -776,13 +784,13 @@ class ChatActivity : ComponentActivity() {
 
             // 历史对话（单击切换 / 长按弹出操作菜单；超过 5 条时列表内部可滑动 + 滚动条）
             Text(
-                text = "历史对话",
+                text = getString(R.string.drawer_history_title),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp)
             )
             Text(
-                text = "单击切换 · 长按编辑对话",
+                text = getString(R.string.drawer_history_hint),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
@@ -874,28 +882,28 @@ class ChatActivity : ComponentActivity() {
             )
 
             // 分组：角色卡
-            DrawerGroupHeader("角色卡", "roleplay")
+            DrawerGroupHeader(getString(R.string.drawer_group_characters), "roleplay")
             if (groupExpanded["roleplay"] == true) {
-                DrawerNavItem(Icons.Filled.Person, "角色扮演", false, true) { onClose(); characterListLauncher.launch(Intent(ctx, CharacterListActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.TravelExplore, "冒险", false, true) { onClose(); adventureLauncher.launch(Intent(ctx, AdventureActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.FileOpen, "导入", false, true) { onClose(); jsonImportLauncher.launch(arrayOf("application/json", "*/*")) }
-                DrawerNavItem(Icons.Filled.Edit, "管理", false, true) {
+                DrawerNavItem(Icons.Filled.Person, getString(R.string.nav_roleplay), false, true) { onClose(); characterListLauncher.launch(Intent(ctx, CharacterListActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.TravelExplore, getString(R.string.nav_adventure), false, true) { onClose(); adventureLauncher.launch(Intent(ctx, AdventureActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.FileOpen, getString(R.string.nav_import), false, true) { onClose(); jsonImportLauncher.launch(arrayOf("application/json", "*/*")) }
+                DrawerNavItem(Icons.Filled.Edit, getString(R.string.nav_manage), false, true) {
                     onClose()
                     characterListLauncher.launch(Intent(ctx, CharacterListActivity::class.java).putExtra("manage_mode", true))
                 }
-                DrawerNavItem(Icons.Filled.Add, "创建", false, true) { onClose(); characterEditLauncher.launch(Intent(ctx, CharacterEditActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.Add, getString(R.string.nav_create), false, true) { onClose(); characterEditLauncher.launch(Intent(ctx, CharacterEditActivity::class.java)) }
             }
 
             // 分组：世界书
-            DrawerGroupHeader("世界书", "world")
+            DrawerGroupHeader(getString(R.string.drawer_group_world), "world")
             if (groupExpanded["world"] == true) {
-                DrawerNavItem(Icons.Filled.AutoStories, "选择", false, true) { onClose(); worldInfoListLauncher.launch(Intent(ctx, WorldInfoListActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.Edit, "管理", false, true) {
+                DrawerNavItem(Icons.Filled.AutoStories, getString(R.string.nav_world_select), false, true) { onClose(); worldInfoListLauncher.launch(Intent(ctx, WorldInfoListActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.Edit, getString(R.string.nav_manage), false, true) {
                     onClose()
                     worldInfoListLauncher.launch(Intent(ctx, WorldInfoListActivity::class.java).putExtra("manage_mode", true))
                 }
-                DrawerNavItem(Icons.Filled.FileOpen, "导入", false, true) { onClose(); worldInfoImportLauncher.launch(arrayOf("application/json", "*/*")) }
-                DrawerNavItem(Icons.Filled.Add, "创建", false, true) {
+                DrawerNavItem(Icons.Filled.FileOpen, getString(R.string.nav_import), false, true) { onClose(); worldInfoImportLauncher.launch(arrayOf("application/json", "*/*")) }
+                DrawerNavItem(Icons.Filled.Add, getString(R.string.nav_create), false, true) {
                     onClose()
                     selectWorldOnReturn = true
                     worldInfoEditLauncher.launch(Intent(ctx, WorldInfoEditActivity::class.java))
@@ -903,17 +911,17 @@ class ChatActivity : ComponentActivity() {
             }
 
             // 分组：记录
-            DrawerGroupHeader("记录", "records")
+            DrawerGroupHeader(getString(R.string.drawer_group_records), "records")
             if (groupExpanded["records"] == true) {
-                DrawerNavItem(Icons.Filled.Favorite, "羁绊档案", false, true) { onClose(); startActivity(Intent(ctx, BondActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.Favorite, getString(R.string.nav_bond), false, true) { onClose(); startActivity(Intent(ctx, BondActivity::class.java)) }
             }
 
             // 分组：其他
-            DrawerGroupHeader("其他", "other")
+            DrawerGroupHeader(getString(R.string.drawer_group_other), "other")
             if (groupExpanded["other"] == true) {
-                DrawerNavItem(Icons.Filled.Settings, "设置", false, true) { onClose(); startActivity(Intent(ctx, SettingsActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.Info, "关于软件", false, true) { onClose(); startActivity(Intent(ctx, AboutActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.MoreVert, "测试崩溃上报", false, true) {
+                DrawerNavItem(Icons.Filled.Settings, getString(R.string.nav_settings), false, true) { onClose(); startActivity(Intent(ctx, SettingsActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.Info, getString(R.string.nav_about), false, true) { onClose(); startActivity(Intent(ctx, AboutActivity::class.java)) }
+                DrawerNavItem(Icons.Filled.MoreVert, getString(R.string.nav_crash_test), false, true) {
                     onClose()
                     throw NullPointerException("这是测试崩溃，验证上报流程")
                 }
@@ -1021,7 +1029,7 @@ class ChatActivity : ComponentActivity() {
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 3.dp)
                     Spacer(Modifier.width(16.dp))
-                    Text("正在分析对话，提炼角色记忆…", fontSize = 14.sp)
+                    Text(getString(R.string.archiving_message), fontSize = 14.sp)
                 }
             }
         }
@@ -1031,25 +1039,25 @@ class ChatActivity : ComponentActivity() {
     private fun ArchiveConfirmDialog() {
         AlertDialog(
             onDismissRequest = { showArchiveConfirm = false },
-            title = { Text("记忆封存确认") },
+            title = { Text(getString(R.string.archive_confirm_title)) },
             text = {
                 Column(
                     modifier = Modifier
                         .heightIn(max = 420.dp)
                         .padding(top = 4.dp)
                 ) {
-                    ArchiveField("本场对话标题", archiveTitleText, { archiveTitleText = it }, singleLine = true, hint = "会话标题")
-                    ArchiveField("与用户关系类型", archiveRelationText, { archiveRelationText = it }, singleLine = true, hint = "例如：生死之交、欢喜冤家")
-                    ArchiveField("与用户相处模式", archiveInteractionText, { archiveInteractionText = it }, hint = "角色如何与你互动")
-                    ArchiveField("与用户关系底线", archiveBottomLineText, { archiveBottomLineText = it }, hint = "角色的底线")
-                    ArchiveField("关键事件（追加到已有事件）", archiveKeyEventsText, { archiveKeyEventsText = it }, hint = "用 - 开头的列表项，每行一条", minLines = 4)
+                    ArchiveField(getString(R.string.archive_field_title), archiveTitleText, { archiveTitleText = it }, singleLine = true, hint = getString(R.string.archive_hint_title))
+                    ArchiveField(getString(R.string.archive_field_relation), archiveRelationText, { archiveRelationText = it }, singleLine = true, hint = getString(R.string.archive_hint_relation))
+                    ArchiveField(getString(R.string.archive_field_interaction), archiveInteractionText, { archiveInteractionText = it }, hint = getString(R.string.archive_hint_interaction))
+                    ArchiveField(getString(R.string.archive_field_bottomline), archiveBottomLineText, { archiveBottomLineText = it }, hint = getString(R.string.archive_hint_bottomline))
+                    ArchiveField(getString(R.string.archive_field_events), archiveKeyEventsText, { archiveKeyEventsText = it }, hint = getString(R.string.archive_hint_events), minLines = 4)
                 }
             },
             confirmButton = {
-                TextButton(onClick = { applyArchiveFromDialog() }) { Text("确认写入") }
+                TextButton(onClick = { applyArchiveFromDialog() }) { Text(getString(R.string.archive_confirm_write)) }
             },
             dismissButton = {
-                TextButton(onClick = { showArchiveConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showArchiveConfirm = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1086,7 +1094,7 @@ class ChatActivity : ComponentActivity() {
         val levels = arrayOf("low", "medium", "high", "xhigh", "max")
         AlertDialog(
             onDismissRequest = { showThinkingLevel = false },
-            title = { Text("选择思考强度") },
+            title = { Text(getString(R.string.thinking_level_title)) },
             text = {
                 Column {
                     levels.forEach { level ->
@@ -1101,7 +1109,7 @@ class ChatActivity : ComponentActivity() {
                                         .putBoolean(SettingsKeys.KEY_THINKING_ENABLED, true)
                                         .putString(SettingsKeys.KEY_THINKING_LEVEL, level)
                                         .apply()
-                                    Toast.makeText(this@ChatActivity, "深度思考已开启（$level）", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@ChatActivity, getString(R.string.thinking_enabled_toast, level), Toast.LENGTH_SHORT).show()
                                     showThinkingLevel = false
                                 }
                                 .padding(vertical = 8.dp),
@@ -1114,7 +1122,7 @@ class ChatActivity : ComponentActivity() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showThinkingLevel = false }) { Text("取消") }
+                TextButton(onClick = { showThinkingLevel = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1123,11 +1131,11 @@ class ChatActivity : ComponentActivity() {
     private fun EditSystemPromptDialog() {
         AlertDialog(
             onDismissRequest = { showEditSystemPrompt = false },
-            title = { Text(stringResource(R.string.system_prompt_for_conv)) },
+            title = { Text(getString(R.string.system_prompt_for_conv)) },
             text = {
                 Column {
                     Text(
-                        text = stringResource(R.string.hint_system_prompt_vars),
+                        text = getString(R.string.hint_system_prompt_vars),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1135,7 +1143,7 @@ class ChatActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = editSystemPromptText,
                         onValueChange = { editSystemPromptText = it },
-                        placeholder = { Text(stringResource(R.string.hint_system_prompt), fontSize = 13.sp) },
+                        placeholder = { Text(getString(R.string.hint_system_prompt), fontSize = 13.sp) },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
@@ -1149,10 +1157,10 @@ class ChatActivity : ComponentActivity() {
                     ConversationManager.save()
                     Toast.makeText(this, R.string.toast_system_prompt_updated, Toast.LENGTH_SHORT).show()
                     showEditSystemPrompt = false
-                }) { Text(stringResource(R.string.btn_save)) }
+                }) { Text(getString(R.string.btn_save)) }
             },
             dismissButton = {
-                TextButton(onClick = { showEditSystemPrompt = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showEditSystemPrompt = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1162,7 +1170,7 @@ class ChatActivity : ComponentActivity() {
         val conv = currentConversation
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(stringResource(R.string.confirm_delete)) },
+            title = { Text(getString(R.string.confirm_delete)) },
             text = { Text(getString(R.string.confirm_delete_msg, conv?.title ?: "")) },
             confirmButton = {
                 TextButton(onClick = {
@@ -1172,10 +1180,10 @@ class ChatActivity : ComponentActivity() {
                         Toast.makeText(this, R.string.toast_conversation_deleted, Toast.LENGTH_SHORT).show()
                     }
                     showDeleteConfirm = false
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                }) { Text(getString(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1184,12 +1192,12 @@ class ChatActivity : ComponentActivity() {
     private fun SearchDialog() {
         AlertDialog(
             onDismissRequest = { showSearch = false },
-            title = { Text("搜索聊天记录") },
+            title = { Text(getString(R.string.search_title)) },
             text = {
                 OutlinedTextField(
                     value = searchKeyword,
                     onValueChange = { searchKeyword = it },
-                    placeholder = { Text("输入关键词", fontSize = 14.sp) },
+                    placeholder = { Text(getString(R.string.search_hint), fontSize = 14.sp) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -1199,7 +1207,7 @@ class ChatActivity : ComponentActivity() {
                 TextButton(onClick = {
                     val conv = currentConversation ?: return@TextButton
                     if (conv.messages.isEmpty()) {
-                        Toast.makeText(this, "没有可搜索的消息", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.search_no_messages), Toast.LENGTH_SHORT).show()
                         return@TextButton
                     }
                     val keyword = searchKeyword.trim()
@@ -1207,21 +1215,21 @@ class ChatActivity : ComponentActivity() {
                     val matches = conv.messages.mapIndexedNotNull { index, msg ->
                         if (msg.content.contains(keyword, ignoreCase = true)) {
                             val preview = msg.content.take(80).replace("\n", " ")
-                            val role = if (msg.role == Message.ROLE_USER) "用户" else "AI"
+                            val role = if (msg.role == Message.ROLE_USER) getString(R.string.role_user_label) else getString(R.string.role_ai_label)
                             "$role: $preview" to index
                         } else null
                     }
                     if (matches.isEmpty()) {
-                        Toast.makeText(this, "未找到匹配结果", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.search_no_result), Toast.LENGTH_SHORT).show()
                         return@TextButton
                     }
                     searchResults = matches
                     showSearch = false
                     showSearchResults = true
-                }) { Text("搜索") }
+                }) { Text(getString(R.string.menu_search)) }
             },
             dismissButton = {
-                TextButton(onClick = { showSearch = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showSearch = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1230,7 +1238,7 @@ class ChatActivity : ComponentActivity() {
     private fun SearchResultsDialog() {
         AlertDialog(
             onDismissRequest = { showSearchResults = false },
-            title = { Text("找到 ${searchResults.size} 条匹配") },
+            title = { Text(getString(R.string.search_result_title, searchResults.size)) },
             text = {
                 Column(
                     modifier = Modifier
@@ -1267,7 +1275,7 @@ class ChatActivity : ComponentActivity() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showSearchResults = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showSearchResults = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1276,13 +1284,13 @@ class ChatActivity : ComponentActivity() {
     private fun ImportConfirmDialog() {
         AlertDialog(
             onDismissRequest = { showImportConfirm = false },
-            title = { Text("导入角色卡") },
+            title = { Text(getString(R.string.import_card_title)) },
             text = {
                 Column {
-                    Text("名称：$importPendingName", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(getString(R.string.import_card_name, importPendingName), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     if (importPendingDesc.isNotBlank()) {
                         Text(
-                            text = "简介：$importPendingDesc",
+                            text = getString(R.string.import_card_desc, importPendingDesc),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -1294,24 +1302,24 @@ class ChatActivity : ComponentActivity() {
                 TextButton(onClick = {
                     val id = CharacterManager.save(this, importPendingJson)
                     if (id != null) {
-                        Toast.makeText(this, "角色「$importPendingName」已导入", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.import_saved_toast, importPendingName), Toast.LENGTH_SHORT).show()
                         startCharacterConversation(id)
                     } else {
-                        Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.import_save_failed), Toast.LENGTH_SHORT).show()
                     }
                     showImportConfirm = false
-                }) { Text("导入并开始聊天") }
+                }) { Text(getString(R.string.import_card_import_chat)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     val id = CharacterManager.save(this, importPendingJson)
                     if (id != null) {
-                        Toast.makeText(this, "角色「$importPendingName」已导入", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.import_saved_toast, importPendingName), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.import_save_failed), Toast.LENGTH_SHORT).show()
                     }
                     showImportConfirm = false
-                }) { Text("仅导入") }
+                }) { Text(getString(R.string.import_card_import_only)) }
             }
         )
     }
@@ -1320,7 +1328,7 @@ class ChatActivity : ComponentActivity() {
     private fun WorldImportWarningsDialog() {
         AlertDialog(
             onDismissRequest = { showWorldImportWarnings = false },
-            title = { Text("导入完成（部分条目被跳过）") },
+            title = { Text(getString(R.string.world_import_warn_title)) },
             text = {
                 Column(
                     modifier = Modifier
@@ -1338,7 +1346,7 @@ class ChatActivity : ComponentActivity() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showWorldImportWarnings = false }) { Text("知道了") }
+                TextButton(onClick = { showWorldImportWarnings = false }) { Text(getString(R.string.got_it)) }
             }
         )
     }
@@ -1353,23 +1361,23 @@ class ChatActivity : ComponentActivity() {
             title = { Text(conv.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             text = {
                 Column {
-                    DialogActionRow(Icons.Filled.Delete, "删除对话", danger = true) {
+                    DialogActionRow(Icons.Filled.Delete, getString(R.string.conv_actions_delete), danger = true) {
                         showConvActions = false
                         showDeleteConvConfirm = true
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    DialogActionRow(Icons.Filled.Delete, "清空对话") {
+                    DialogActionRow(Icons.Filled.Delete, getString(R.string.conv_actions_clear)) {
                         showConvActions = false
                         showClearConvConfirm = true
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    DialogActionRow(Icons.Filled.Edit, "重命名对话") {
+                    DialogActionRow(Icons.Filled.Edit, getString(R.string.conv_actions_rename)) {
                         renameText = conv.title
                         showConvActions = false
                         showRenameDialog = true
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    DialogActionRow(Icons.Filled.AutoStories, "世界书设置") {
+                    DialogActionRow(Icons.Filled.AutoStories, getString(R.string.conv_actions_world)) {
                         showConvActions = false
                         showWorldSelect = true
                     }
@@ -1377,7 +1385,7 @@ class ChatActivity : ComponentActivity() {
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showConvActions = false }) { Text("取消") }
+                TextButton(onClick = { showConvActions = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1410,7 +1418,7 @@ class ChatActivity : ComponentActivity() {
     private fun DeleteConvConfirmDialog() {
         AlertDialog(
             onDismissRequest = { showDeleteConvConfirm = false },
-            title = { Text(stringResource(R.string.confirm_delete)) },
+            title = { Text(getString(R.string.confirm_delete)) },
             text = { Text(getString(R.string.confirm_delete_msg, actionConv?.title ?: "")) },
             confirmButton = {
                 TextButton(onClick = {
@@ -1419,10 +1427,10 @@ class ChatActivity : ComponentActivity() {
                         if (conv.id == currentConversation?.id) refreshCurrentConversation()
                     }
                     showDeleteConvConfirm = false
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                }) { Text(getString(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConvConfirm = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showDeleteConvConfirm = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1431,8 +1439,8 @@ class ChatActivity : ComponentActivity() {
     private fun ClearConvConfirmDialog() {
         AlertDialog(
             onDismissRequest = { showClearConvConfirm = false },
-            title = { Text("确认清空") },
-            text = { Text("确定要清空「${actionConv?.title ?: ""}」的所有消息吗？") },
+            title = { Text(getString(R.string.confirm_clear_title)) },
+            text = { Text(getString(R.string.confirm_clear_msg, actionConv?.title ?: "")) },
             confirmButton = {
                 TextButton(onClick = {
                     actionConv?.let { conv ->
@@ -1444,10 +1452,10 @@ class ChatActivity : ComponentActivity() {
                         }
                     }
                     showClearConvConfirm = false
-                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+                }) { Text(getString(R.string.conv_actions_clear), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConvConfirm = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showClearConvConfirm = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1456,12 +1464,12 @@ class ChatActivity : ComponentActivity() {
     private fun RenameDialog() {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("重命名对话") },
+            title = { Text(getString(R.string.rename_title)) },
             text = {
                 OutlinedTextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    label = { Text("新标题") },
+                    label = { Text(getString(R.string.rename_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -1477,10 +1485,10 @@ class ChatActivity : ComponentActivity() {
                         }
                     }
                     showRenameDialog = false
-                }) { Text("保存") }
+                }) { Text(getString(R.string.btn_save_short)) }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showRenameDialog = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1496,18 +1504,22 @@ class ChatActivity : ComponentActivity() {
         }
         AlertDialog(
             onDismissRequest = { showWorldSelect = false },
-            title = { Text("世界书设置") },
+            title = { Text(getString(R.string.world_select_title)) },
             text = {
                 Column {
                     Text(
-                        text = if (selectedIds.isEmpty()) "未启用任何世界书" else "已启用 ${selectedIds.size} 本",
+                        text = if (selectedIds.isEmpty()) {
+                            getString(R.string.world_select_none)
+                        } else {
+                            getString(R.string.world_select_count, selectedIds.size)
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     if (worlds.isEmpty()) {
                         Text(
-                            text = "还没有世界书，请先到左侧「世界书 → 创建/导入」添加",
+                            text = getString(R.string.world_select_empty_hint),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -1543,10 +1555,10 @@ class ChatActivity : ComponentActivity() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { applyWorldSelection(selectedIds.toList()) }) { Text("确定") }
+                TextButton(onClick = { applyWorldSelection(selectedIds.toList()) }) { Text(getString(R.string.btn_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showWorldSelect = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showWorldSelect = false }) { Text(getString(R.string.cancel)) }
             }
         )
     }
@@ -1560,7 +1572,11 @@ class ChatActivity : ComponentActivity() {
         showWorldSelect = false
         Toast.makeText(
             this,
-            if (ids.isEmpty()) "已禁用世界书" else "世界书已启用（${ids.size} 本）",
+            if (ids.isEmpty()) {
+                getString(R.string.world_disabled_toast)
+            } else {
+                getString(R.string.world_enabled_count_toast, ids.size)
+            },
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -1575,20 +1591,20 @@ class ChatActivity : ComponentActivity() {
             result.fold(
                 onSuccess = { messages ->
                     val conv = ConversationManager.createNew()
-                    conv.title = "导入的对话"
+                    conv.title = getString(R.string.chat_log_import_title)
                     conv.messages.clear()
                     conv.messages.addAll(messages)
                     conv.updatedAt = messages.lastOrNull()?.timestamp ?: System.currentTimeMillis()
                     ConversationManager.save()
                     refreshCurrentConversation()
-                    Toast.makeText(this, "已导入 ${messages.size} 条消息", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.chat_log_imported, messages.size), Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { e ->
-                    Toast.makeText(this, "导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.chat_log_import_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
                 }
             )
         } catch (e: Exception) {
-            Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.chat_log_import_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1599,7 +1615,7 @@ class ChatActivity : ComponentActivity() {
 
             val card = TavernCardImporter.parse(json)
             if (card.isFailure) {
-                Toast.makeText(this, "角色卡格式无效: ${card.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.card_format_invalid, card.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
                 return
             }
 
@@ -1609,7 +1625,7 @@ class ChatActivity : ComponentActivity() {
             importPendingJson = json
             showImportConfirm = true
         } catch (e: Exception) {
-            Toast.makeText(this, "读取文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.file_read_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1620,19 +1636,21 @@ class ChatActivity : ComponentActivity() {
             when (val result = WorldInfoImporter.parse(json)) {
                 is WorldInfoImporter.ImportResult.Success -> {
                     WorldInfoManager.saveNew(this, result.info)
-                    val warnText = if (result.warnings.isNotEmpty()) "（${result.warnings.size} 条警告）" else ""
-                    Toast.makeText(this, "世界书「${result.info.name}」已导入$warnText", Toast.LENGTH_SHORT).show()
+                    val warnText = if (result.warnings.isNotEmpty()) {
+                        getString(R.string.world_import_warn_suffix, result.warnings.size)
+                    } else ""
+                    Toast.makeText(this, getString(R.string.world_import_ok, result.info.name, warnText), Toast.LENGTH_SHORT).show()
                     if (result.warnings.isNotEmpty()) {
                         worldImportWarnings = result.warnings
                         showWorldImportWarnings = true
                     }
                 }
                 is WorldInfoImporter.ImportResult.Failure -> {
-                    Toast.makeText(this, "导入失败：${result.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.world_import_failed, result.message), Toast.LENGTH_LONG).show()
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.world_import_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1640,7 +1658,11 @@ class ChatActivity : ComponentActivity() {
         if (roleIds.isEmpty()) return
         val worldName = worldId?.let { WorldInfoManager.load(this, it)?.name } ?: ""
         val conv = ConversationManager.createNew()
-        conv.title = if (worldName.isNotBlank()) "冒险: $worldName" else "文字冒险"
+        conv.title = if (worldName.isNotBlank()) {
+            getString(R.string.adventure_title_prefix, worldName)
+        } else {
+            getString(R.string.adventure_title_default)
+        }
         conv.setBoundWorlds(listOfNotNull(worldId))
         conv.adventureRoleIds = roleIds
         conv.systemPrompt = ConversationManager.ADVENTURE_DM_PROMPT
@@ -1687,7 +1709,7 @@ class ChatActivity : ComponentActivity() {
         conv.setBoundWorlds(conv.boundWorldIds() + id)
         ConversationManager.save()
         refreshCurrentConversation()
-        Toast.makeText(this, "世界书已启用", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.world_enabled_toast), Toast.LENGTH_SHORT).show()
     }
 
     private fun applyBackground() {
@@ -1778,25 +1800,25 @@ class ChatActivity : ComponentActivity() {
     private fun handleArchiveMemory() {
         val conv = currentConversation ?: return
         if (conv.isStreaming) {
-            Toast.makeText(this, "等待回复完成后再封存", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_wait_streaming), Toast.LENGTH_SHORT).show()
             return
         }
         if (conv.isArchived) {
-            Toast.makeText(this, "本会话记忆已封存", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_already_done), Toast.LENGTH_SHORT).show()
             return
         }
         val characterId = conv.characterId
         if (characterId == null) {
-            Toast.makeText(this, "请先绑定角色卡再封存记忆", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_need_character), Toast.LENGTH_SHORT).show()
             return
         }
         val card = CharacterManager.loadCard(this, characterId)
         if (card == null) {
-            Toast.makeText(this, "角色卡不存在", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_card_missing), Toast.LENGTH_SHORT).show()
             return
         }
         if (conv.messages.none { it.role == Message.ROLE_USER }) {
-            Toast.makeText(this, "还没有可分析的对话内容", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_no_messages), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -1825,7 +1847,7 @@ class ChatActivity : ComponentActivity() {
                 result.fold(
                     onSuccess = { archive -> startArchiveConfirm(conv, archive) },
                     onFailure = { e ->
-                        Toast.makeText(this, "记忆分析失败：${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, getString(R.string.archive_analyze_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
                     }
                 )
             }
@@ -1835,7 +1857,7 @@ class ChatActivity : ComponentActivity() {
     private fun startArchiveConfirm(conv: Conversation, archive: MemoryArchiver.ArchiveResult) {
         val currentCard = CharacterManager.loadCard(this, conv.characterId!!)
         if (currentCard == null) {
-            Toast.makeText(this, "角色卡加载失败，无法封存", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.archive_card_load_failed), Toast.LENGTH_LONG).show()
             return
         }
         val fields = currentCard.data.getCharacterFields()
@@ -1901,9 +1923,9 @@ class ChatActivity : ComponentActivity() {
             if (newTitle.isNotBlank()) conv.title = newTitle
             ConversationManager.save()
             refreshCurrentConversation()
-            Toast.makeText(this, "记忆已封存到角色卡，会话已锁定", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_done_toast), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "写回角色卡失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.archive_write_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1925,7 +1947,7 @@ class ChatActivity : ComponentActivity() {
         inputText = ""
 
         // Free Gateway: 发送时统一显示"正在获取模型"，收到响应后更新
-        modelInfoText = "模型：正在获取模型…"
+        modelInfoText = getString(R.string.model_fetching)
 
         ConversationManager.sendMessage(
             apiConfig = apiConfig,
@@ -1938,10 +1960,10 @@ class ChatActivity : ComponentActivity() {
             onModelInfo = { model, provider ->
                 runOnUiThread {
                     modelInfoText = if (model == null) {
-                        "模型：获取失败"
+                        getString(R.string.model_fetch_failed)
                     } else {
                         val label = if (provider.isNullOrBlank()) model else "$provider · $model"
-                        "模型：$label"
+                        getString(R.string.model_info_format, label)
                     }
                 }
             },
@@ -1965,7 +1987,7 @@ class ChatActivity : ComponentActivity() {
 
         val lastUserIdx = conv.messages.indexOfLast { it.role == Message.ROLE_USER }
         if (lastUserIdx < 0) {
-            Toast.makeText(this, "没有可重试的消息", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_retry_message), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -2013,7 +2035,7 @@ class ChatActivity : ComponentActivity() {
                     pendingAttachmentType = ATTACH_TYPE_TEXT
                     pendingAttachmentData = text
                     pendingAttachmentName = fileName
-                    inputHint = "[TXT] $fileName | ${getString(R.string.hint_input)}"
+                    inputHint = getString(R.string.attach_txt_hint, fileName, getString(R.string.hint_input))
                     Toast.makeText(this, R.string.toast_file_attached, Toast.LENGTH_SHORT).show()
                 }
                 mimeType.startsWith("image/") -> {
@@ -2048,13 +2070,13 @@ class ChatActivity : ComponentActivity() {
                     pendingAttachmentType = ATTACH_TYPE_IMAGE
                     pendingAttachmentData = base64
                     pendingAttachmentName = fileName
-                    inputHint = "[IMG] $fileName | ${getString(R.string.hint_input)}"
+                    inputHint = getString(R.string.attach_img_hint, fileName, getString(R.string.hint_input))
                     Toast.makeText(this, R.string.toast_file_attached, Toast.LENGTH_SHORT).show()
                 }
                 else -> Toast.makeText(this, R.string.file_unsupported, Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "读取文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.file_read_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 

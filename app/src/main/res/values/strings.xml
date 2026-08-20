@@ -109,4 +109,343 @@
     <string name="kilo_model_tip_title">免费模型提示</string>
     <string name="kilo_model_tip_message">可用免费模型会随提供商政策变化而变化，指定模型的选项可能会失效。建议采用自动路由分配可用模型，确保稳定可用。</string>
     <string name="got_it">知道了</string>
+
+    <!-- 冒险模式 DM/GM 系统指令（发给 AI，跟随 UI 语言） -->
+    <string name="adventure_dm_prompt"><![CDATA[你是一名经验丰富的故事主持人（DM/GM）。你将主持一场文字冒险（跑团）：
+1. 根据世界设定与角色卡，推进剧情、描写场景、扮演所有 NPC 与角色。
+2. 用语言、行为、剧情推动互动，每次回复保持沉浸感，不要跳出角色。
+3. 玩家可以用「语言」「行为」「剧情」三种方式输入：
+   - [语言]：说一段话（角色会回应）
+   - [行为]：做一个动作（描述结果）
+   - [剧情]：引导剧情走向（控制故事节奏）
+4. 重要剧情节点给出选择支（A/B/C）让玩家决策。
+5. 保持世界观一致，善用世界书中的设定。]]></string>
+
+    <!-- 聊天页：空态 / 冒险 chips / 抽屉 -->
+    <string name="chat_empty_title">开始一段对话</string>
+    <string name="chat_empty_subtitle">与角色、世界书或冒险模式互动</string>
+    <string name="adventure_chip_language">[语言]</string>
+    <string name="adventure_chip_action">[行为]</string>
+    <string name="adventure_chip_plot">[剧情]</string>
+    <string name="drawer_new_chat">新对话</string>
+    <string name="drawer_history_title">历史对话</string>
+    <string name="drawer_history_hint">单击切换 · 长按编辑对话</string>
+    <string name="drawer_group_characters">角色卡</string>
+    <string name="drawer_group_world">世界书</string>
+    <string name="drawer_group_records">记录</string>
+    <string name="drawer_group_other">其他</string>
+    <string name="nav_roleplay">角色扮演</string>
+    <string name="nav_adventure">冒险</string>
+    <string name="nav_import">导入</string>
+    <string name="nav_manage">管理</string>
+    <string name="nav_create">创建</string>
+    <string name="nav_world_select">选择</string>
+    <string name="nav_bond">羁绊档案</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_about">关于软件</string>
+    <string name="nav_crash_test">测试崩溃上报</string>
+
+    <!-- 聊天页：顶栏菜单 -->
+    <string name="menu_web_search_on">开启联网搜索</string>
+    <string name="menu_web_search_off">关闭联网搜索</string>
+    <string name="menu_thinking_level">深度思考：%s</string>
+    <string name="menu_thinking_off">深度思考：关闭</string>
+    <string name="menu_retry">重试最后发送</string>
+    <string name="menu_archive_memory">封存记忆到角色卡</string>
+    <string name="menu_import_chat_log">导入酒馆聊天记录</string>
+    <string name="menu_search">搜索</string>
+    <string name="menu_edit_system_prompt">编辑系统提示词</string>
+
+    <!-- 聊天页：长按对话操作 -->
+    <string name="conv_actions_delete">删除对话</string>
+    <string name="conv_actions_clear">清空对话</string>
+    <string name="conv_actions_rename">重命名对话</string>
+    <string name="conv_actions_world">世界书设置</string>
+    <string name="confirm_clear_title">确认清空</string>
+    <string name="confirm_clear_msg">确定要清空「%s」的所有消息吗？</string>
+    <string name="rename_title">重命名对话</string>
+    <string name="rename_label">新标题</string>
+    <string name="btn_ok">确定</string>
+    <string name="btn_save_short">保存</string>
+
+    <!-- 聊天页：世界书设置（多选） -->
+    <string name="world_select_title">世界书设置</string>
+    <string name="world_select_none">未启用任何世界书</string>
+    <string name="world_select_count">已启用 %d 本</string>
+    <string name="world_select_empty_hint">还没有世界书，请先到左侧「世界书 → 创建/导入」添加</string>
+    <string name="world_disabled_toast">已禁用世界书</string>
+    <string name="world_enabled_count_toast">世界书已启用（%d 本）</string>
+    <string name="world_enabled_toast">世界书已启用</string>
+
+    <!-- 聊天页：记忆封存 -->
+    <string name="archive_confirm_title">记忆封存确认</string>
+    <string name="archive_confirm_write">确认写入</string>
+    <string name="archive_field_title">本场对话标题</string>
+    <string name="archive_field_relation">与用户关系类型</string>
+    <string name="archive_field_interaction">与用户相处模式</string>
+    <string name="archive_field_bottomline">与用户关系底线</string>
+    <string name="archive_field_events">关键事件（追加到已有事件）</string>
+    <string name="archiving_message">正在分析对话，提炼角色记忆…</string>
+    <string name="archive_wait_streaming">等待回复完成后再封存</string>
+    <string name="archive_already_done">本会话记忆已封存</string>
+    <string name="archive_need_character">请先绑定角色卡再封存记忆</string>
+    <string name="archive_card_missing">角色卡不存在</string>
+    <string name="archive_no_messages">还没有可分析的对话内容</string>
+    <string name="archive_analyze_failed">记忆分析失败：%s</string>
+    <string name="archive_card_load_failed">角色卡加载失败，无法封存</string>
+    <string name="archive_done_toast">记忆已封存到角色卡，会话已锁定</string>
+    <string name="archive_write_failed">写回角色卡失败</string>
+
+    <!-- 聊天页：思考强度 / 搜索 / 导入 -->
+    <string name="thinking_level_title">选择思考强度</string>
+    <string name="thinking_enabled_toast">深度思考已开启（%s）</string>
+    <string name="search_title">搜索聊天记录</string>
+    <string name="search_hint">输入关键词</string>
+    <string name="search_no_messages">没有可搜索的消息</string>
+    <string name="search_no_result">未找到匹配结果</string>
+    <string name="search_result_title">找到 %d 条匹配</string>
+    <string name="import_card_title">导入角色卡</string>
+    <string name="import_card_name">名称：%s</string>
+    <string name="import_card_desc">简介：%s</string>
+    <string name="import_card_import_chat">导入并开始聊天</string>
+    <string name="import_card_import_only">仅导入</string>
+    <string name="import_saved_toast">角色「%s」已导入</string>
+    <string name="import_save_failed">保存失败</string>
+    <string name="world_import_warn_title">导入完成（部分条目被跳过）</string>
+
+    <!-- 聊天页：模型信息 / 消息区 / 附件 -->
+    <string name="model_fetching">模型：正在获取模型…</string>
+    <string name="model_fetch_failed">模型：获取失败</string>
+    <string name="model_info_format">模型：%s</string>
+    <string name="msg_thinking_label">思考</string>
+    <string name="msg_system_prompt_fold">系统提示词（已融合设定）</string>
+    <string name="msg_thinking_dots">思考中…</string>
+    <string name="msg_card_marker">角色卡（点击查看）</string>
+    <string name="msg_avatar_desc">头像</string>
+    <string name="attach_txt_hint">[TXT] %1$s | %2$s</string>
+    <string name="attach_img_hint">[IMG] %1$s | %2$s</string>
+    <string name="no_retry_message">没有可重试的消息</string>
+    <string name="chat_log_imported">已导入 %d 条消息</string>
+    <string name="chat_log_import_failed">导入失败：%s</string>
+    <string name="file_read_failed">读取文件失败: %s</string>
+    <string name="card_format_invalid">角色卡格式无效: %s</string>
+    <string name="world_import_failed">导入失败：%s</string>
+    <string name="world_import_ok">世界书「%s」已导入%s</string>
+    <string name="toast_image_invalid">图片无效</string>
+    <string name="menu_desc">菜单</string>
+    <string name="archive_hint_title">会话标题</string>
+    <string name="archive_hint_relation">例如：生死之交、欢喜冤家</string>
+    <string name="archive_hint_interaction">角色如何与你互动</string>
+    <string name="archive_hint_bottomline">角色的底线</string>
+    <string name="archive_hint_events">用 - 开头的列表项，每行一条</string>
+    <string name="role_user_label">用户</string>
+    <string name="role_ai_label">AI</string>
+    <string name="chat_log_import_title">导入的对话</string>
+    <string name="world_import_warn_suffix">（%d 条警告）</string>
+    <string name="adventure_title_prefix">冒险: %s</string>
+    <string name="adventure_title_default">文字冒险</string>
+
+    <!-- 设置页 -->
+    <string name="settings_page_title">设置</string>
+    <string name="settings_page_subtitle">个性化你的 SAChat</string>
+    <string name="settings_group_api">API 配置</string>
+    <string name="settings_group_font">字体大小</string>
+    <string name="settings_group_prompt">提示词管理</string>
+    <string name="settings_group_search">联网搜索配置</string>
+    <string name="settings_group_bg">背景图片</string>
+    <string name="settings_group_nickname">聊天昵称</string>
+    <string name="settings_add_api">添加 API</string>
+    <string name="settings_label_hint">标签（如：主力GPT）</string>
+    <string name="settings_label_empty">标签不能为空</string>
+    <string name="settings_edit_api">编辑 API</string>
+    <string name="settings_add_api_title">添加 API</string>
+    <string name="settings_in_use">当前使用</string>
+    <string name="settings_not_configured">未配置</string>
+    <string name="settings_delete">删除</string>
+    <string name="settings_font_size_hint">大小（sp）</string>
+    <string name="settings_font_preview">预览</string>
+    <string name="settings_system_prompt_label">默认系统提示词</string>
+    <string name="settings_system_prompt_note">仅在默认聊天模式起效，角色模式只按角色卡提示词来</string>
+    <string name="settings_world_budget_label">世界书 token 预算（酒馆 Context %%/Budget 对齐）</string>
+    <string name="settings_world_budget_note">世界书命中条目按此预算注入上下文，超出部分不注入（常驻条目优先）</string>
+    <string name="settings_search_url_label">搜索 API 地址</string>
+    <string name="settings_search_note">配置后可在右侧三点菜单中开启联网搜索</string>
+    <string name="settings_bg_color">自动适应</string>
+    <string name="settings_bg_image">图片填充</string>
+    <string name="settings_pick_png">选择 PNG 图片</string>
+    <string name="settings_no_image">未选择图片</string>
+    <string name="settings_bg_fit">适应比例</string>
+    <string name="settings_bg_fill">原比例填充</string>
+    <string name="settings_pick_user_avatar">选择我的头像</string>
+    <string name="settings_pick_ai_avatar">选择 AI 头像</string>
+    <string name="settings_avatar_picked">%s头像已选择</string>
+    <string name="settings_save">保存设置</string>
+    <string name="settings_saved_toast">设置已保存</string>
+    <string name="settings_image_invalid">图片无效</string>
+    <string name="settings_bg_picked">背景图片已选择</string>
+    <string name="settings_image_failed">图片加载失败</string>
+    <string name="settings_avatar_failed">头像加载失败</string>
+    <string name="settings_language">语言 / Language</string>
+    <string name="settings_language_tip">切换语言将立即生效并返回聊天页</string>
+    <string name="settings_language_system">跟随系统 / System</string>
+
+    <!-- 关于页 -->
+    <string name="about_version_slogan">%s · 轻量 AI 聊天</string>
+    <string name="about_author_name">作者 · 明日awo</string>
+    <string name="about_author_desc">99%% 纯天然 AI 制作</string>
+    <string name="about_license">开源许可 · MIT</string>
+    <string name="about_license_desc">可自由使用、修改与分发</string>
+    <string name="about_copyright">Copyright © 2026 5h1iky</string>
+
+    <!-- 角色卡列表 -->
+    <string name="char_list_title_manage">角色管理</string>
+    <string name="char_list_title_select">选择角色</string>
+    <string name="char_list_import">导入</string>
+    <string name="char_list_new">新建角色卡</string>
+    <string name="char_list_empty">暂无角色卡，点击右上角 + 新建或导入</string>
+    <string name="char_list_edit">编辑角色卡</string>
+    <string name="char_list_export">导出角色卡</string>
+    <string name="char_list_exported">角色卡已导出</string>
+    <string name="char_list_export_failed">导出失败: %s</string>
+    <string name="char_list_export_unreadable">导出失败：无法读取角色卡</string>
+    <string name="char_list_deleted">已删除</string>
+    <string name="char_list_invalid">角色卡格式无效</string>
+    <string name="char_list_imported">角色「%s」已导入</string>
+    <string name="char_list_import_failed">导入失败: %s</string>
+    <string name="back">返回</string>
+
+    <!-- 世界书列表 -->
+    <string name="world_list_title_manage">世界书管理</string>
+    <string name="world_list_title_select">选择世界书</string>
+    <string name="world_list_new">新建世界书</string>
+    <string name="world_list_empty">暂无世界书，点击右上角 + 新建或导入</string>
+    <string name="world_list_longpress_hint">长按对话启用</string>
+    <string name="world_list_entries">%d 条目</string>
+    <string name="world_list_no_conv">暂无对话启用</string>
+    <string name="world_list_used_by">启用对话：%s</string>
+    <string name="world_list_edit">编辑世界书</string>
+    <string name="world_list_export">导出世界书</string>
+    <string name="world_list_exported">世界书已导出</string>
+    <string name="world_list_export_failed">导出失败: %s</string>
+    <string name="world_list_export_unreadable">导出失败：无法读取世界书</string>
+
+    <!-- 角色卡编辑 -->
+    <string name="char_edit_avatar_failed">头像加载失败</string>
+    <string name="char_edit_name_empty">角色名不能为空</string>
+    <string name="char_edit_saved">角色「%s」已保存</string>
+    <string name="char_edit_unnamed">未命名角色</string>
+    <string name="char_edit_preview">效果预览</string>
+    <string name="char_edit_title">编辑角色卡</string>
+    <string name="char_edit_mode_edit">编辑</string>
+    <string name="char_edit_mode_preview">预览</string>
+    <string name="char_edit_change_avatar">更换头像</string>
+    <string name="char_edit_pick_avatar">选择头像</string>
+    <string name="field_basic">基础信息</string>
+    <string name="field_name">姓名</string>
+    <string name="field_age">年龄</string>
+    <string name="field_gender">性别</string>
+    <string name="field_race">种族</string>
+    <string name="field_birthplace">出生地</string>
+    <string name="field_occupation">职业</string>
+    <string name="field_social_class">社会阶层</string>
+    <string name="field_identity_tags">身份标签</string>
+    <string name="field_tags_hint">输入标签，回车添加</string>
+    <string name="field_appearance">外貌气质</string>
+    <string name="field_height_build">身高体型</string>
+    <string name="field_iconic_features">标志性特征</string>
+    <string name="field_clothing_style">衣着风格</string>
+    <string name="field_overall_vibe">整体气质</string>
+    <string name="field_personality">性格特征</string>
+    <string name="field_ext_personality">外在性格</string>
+    <string name="field_int_personality">内在性格</string>
+    <string name="field_core_desire">核心欲望</string>
+    <string name="field_fear_weakness">恐惧与弱点</string>
+    <string name="field_moral_values">道德观念</string>
+    <string name="field_quirk">怪癖</string>
+    <string name="field_skills_history">技能与经历</string>
+    <string name="field_skills">技能专长</string>
+    <string name="field_background">背景故事</string>
+    <string name="field_relationships">人际关系</string>
+    <string name="field_speaking_style">说话方式</string>
+    <string name="field_typical_reactions">典型反应</string>
+    <string name="field_memory_group">角色记忆（记忆封存写回目标）</string>
+    <string name="field_key_events">关键事件</string>
+    <string name="field_tavern_group">对话设置（Tavern 兼容字段）</string>
+    <string name="field_first_mes">开场白 first_mes</string>
+    <string name="field_mes_example">示例对话 mes_example</string>
+    <string name="field_system_prompt">系统提示词 system_prompt</string>
+    <string name="field_post_history">历史后指令 post_history</string>
+    <string name="field_description">描述 description</string>
+
+    <!-- 世界书编辑 -->
+    <string name="pos_before_char_defs">角色定义前</string>
+    <string name="pos_after_system_prompt">角色定义后</string>
+    <string name="pos_before_examples">示例对话前</string>
+    <string name="pos_after_examples">示例对话后</string>
+    <string name="pos_at_depth">@ 深度注入</string>
+    <string name="world_edit_name_empty">名称不能为空</string>
+    <string name="world_edit_saved">世界书「%s」已保存</string>
+    <string name="world_edit_title">编辑世界书</string>
+    <string name="world_edit_basic">基本信息</string>
+    <string name="world_edit_name">名称</string>
+    <string name="world_edit_desc">描述</string>
+    <string name="world_edit_tips_title">提示</string>
+    <string name="world_edit_tips_preview">世界书行为对标酒馆（SillyTavern）</string>
+    <string name="world_edit_tips_content">关键词触发（支持正则 /.../、whole words 整词匹配、次级关键词过滤、触发概率、常驻、@深度注入）。token 预算可在「设置」中调整。</string>
+    <string name="world_edit_entries">条目（%d）</string>
+    <string name="world_edit_entry_hint">点击条目编辑，长按删除</string>
+    <string name="world_edit_add_entry">添加条目</string>
+    <string name="world_edit_add">添加</string>
+    <string name="world_edit_unnamed_entry">未命名条目</string>
+    <string name="world_edit_entry_meta">%1$s | 优先级 %2$d</string>
+    <string name="world_edit_entry_title">编辑条目</string>
+    <string name="world_edit_keywords">关键词（逗号分隔，/.../ 视为正则）</string>
+    <string name="world_edit_secondary_keys">次级关键词（可选过滤）</string>
+    <string name="world_edit_content">内容</string>
+    <string name="world_edit_position">注入位置</string>
+    <string name="world_edit_priority">优先级(Order)</string>
+    <string name="world_edit_probability">概率%</string>
+    <string name="world_edit_inject_depth">注入深度</string>
+    <string name="world_edit_scan_depth">扫描深度</string>
+    <string name="world_edit_role_filter">角色过滤(user/assistant)</string>
+    <string name="world_edit_group">包含组</string>
+    <string name="world_edit_const">常驻</string>
+    <string name="world_edit_regex">正则</string>
+    <string name="world_edit_case">大小写</string>
+    <string name="world_edit_whole_words">整词匹配</string>
+    <string name="world_edit_selective">次级过滤</string>
+    <string name="world_edit_use_prob">启用概率</string>
+    <string name="world_edit_pick_position">选择注入位置</string>
+
+    <!-- 羁绊档案 -->
+    <string name="bond_title">羁绊档案</string>
+    <string name="bond_empty">还没有羁绊记录。\n与角色对话后使用「封存记忆」，关系与事件会沉淀在这里。</string>
+    <string name="bond_sessions_count">%d 段封存记忆</string>
+    <string name="bond_overview">关系概览</string>
+    <string name="bond_relation_type">关系类型</string>
+    <string name="bond_interaction_model">相处模式</string>
+    <string name="bond_bottom_line">关系底线</string>
+    <string name="bond_timeline">关键事件时间线</string>
+    <string name="bond_timeline_empty">暂无记录，封存对话后关键事件会出现在这里</string>
+    <string name="bond_footprints">会话足迹（%d）</string>
+    <string name="bond_msg_count">%1$s · %2$d 条消息</string>
+
+    <!-- 文字冒险 -->
+    <string name="adventure_need_role">请至少选择一张角色卡</string>
+    <string name="adventure_title">文字冒险</string>
+    <string name="adventure_start">开始冒险</string>
+    <string name="adventure_world_group">世界书（单选，可选）</string>
+    <string name="adventure_no_world">暂无世界书</string>
+    <string name="adventure_role_group">角色卡（多选，至少 1 张）</string>
+    <string name="adventure_no_role">暂无角色卡，请先创建或导入</string>
+    <string name="adventure_opening_group">开场剧情</string>
+    <string name="adventure_opening_hint">输入故事开端（可选）</string>
+    <string name="adventure_input_hint">冒险中可用 [语言] [行为] [剧情] 三种方式输入</string>
+    <string name="adventure_selected_roles">已选 %d 个角色</string>
+
+    <!-- 启动页 -->
+    <string name="splash_crash_title">上次使用出现问题</string>
+    <string name="splash_crash_msg">软件上次运行时出现了异常。你可以复制详细信息发给我，我来修复。</string>
+    <string name="splash_crash_copy">复制并反馈</string>
+    <string name="splash_crash_ignore">忽略</string>
 </resources>

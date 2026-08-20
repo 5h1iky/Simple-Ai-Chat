@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import www.cetool.com.manager.CharacterManager
@@ -61,6 +63,10 @@ data class BondCharacter(
  * 角色列表 → 关系概览卡片 + 关键事件时间线 + 会话足迹。
  */
 class BondActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,10 +122,10 @@ private fun BondListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("羁绊档案") },
+                title = { Text(stringResource(R.string.bond_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
@@ -128,7 +134,7 @@ private fun BondListScreen(
         if (bonds.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "还没有羁绊记录。\n与角色对话后使用「封存记忆」，关系与事件会沉淀在这里。",
+                    text = stringResource(R.string.bond_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -161,7 +167,7 @@ private fun BondListScreen(
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = buildString {
-                                        append("${bond.sessionCount} 段封存记忆")
+                                        append(stringResource(R.string.bond_sessions_count, bond.sessionCount))
                                         if (bond.fields.userRelationType.isNotBlank()) {
                                             append(" | ${bond.fields.userRelationType}")
                                         }
@@ -200,7 +206,7 @@ private fun BondDetailScreen(
                 title = { Text(bond.name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
@@ -212,18 +218,18 @@ private fun BondDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("关系概览") {
-                    DetailRow("关系类型", bond.fields.userRelationType)
-                    DetailRow("相处模式", bond.fields.userInteractionModel)
-                    DetailRow("关系底线", bond.fields.userRelationBottomLine)
+                SectionCard(stringResource(R.string.bond_overview)) {
+                    DetailRow(stringResource(R.string.bond_relation_type), bond.fields.userRelationType)
+                    DetailRow(stringResource(R.string.bond_interaction_model), bond.fields.userInteractionModel)
+                    DetailRow(stringResource(R.string.bond_bottom_line), bond.fields.userRelationBottomLine)
                 }
             }
 
             item {
-                SectionCard("关键事件时间线") {
+                SectionCard(stringResource(R.string.bond_timeline)) {
                     if (events.isEmpty()) {
                         Text(
-                            "暂无记录，封存对话后关键事件会出现在这里",
+                            text = stringResource(R.string.bond_timeline_empty),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -245,7 +251,7 @@ private fun BondDetailScreen(
             }
 
             item {
-                SectionCard("会话足迹（${sessions.size}）") {
+                SectionCard(stringResource(R.string.bond_footprints, sessions.size)) {
                     sessions.sortedByDescending { it.updatedAt }.forEach { conv ->
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Text(
@@ -255,7 +261,11 @@ private fun BondDetailScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${timeFormat.format(Date(conv.updatedAt))} · ${conv.messages.count { it.role == www.cetool.com.model.Message.ROLE_USER }} 条消息",
+                                text = stringResource(
+                                    R.string.bond_msg_count,
+                                    timeFormat.format(Date(conv.updatedAt)),
+                                    conv.messages.count { it.role == www.cetool.com.model.Message.ROLE_USER }
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

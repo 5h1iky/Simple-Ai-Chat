@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -49,6 +50,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -63,21 +66,34 @@ import www.cetool.com.ui.theme.SAChatTheme
 import java.util.UUID
 
 private val POSITION_OPTIONS = listOf(
-    "before_char_defs" to "角色定义前",
-    "after_system_prompt" to "角色定义后",
-    "before_example_messages" to "示例对话前",
-    "after_example_messages" to "示例对话后",
-    "at_depth" to "@ 深度注入"
+    "before_char_defs",
+    "after_system_prompt",
+    "before_example_messages",
+    "after_example_messages",
+    "at_depth"
 )
 
-private fun positionLabel(position: String): String {
-    return POSITION_OPTIONS.firstOrNull { it.first == position }?.second ?: position
+/** 注入位置显示名（跟随 UI 语言） */
+private fun positionLabel(context: android.content.Context, position: String): String {
+    val res = when (position) {
+        "before_char_defs" -> R.string.pos_before_char_defs
+        "after_system_prompt" -> R.string.pos_after_system_prompt
+        "before_example_messages" -> R.string.pos_before_examples
+        "after_example_messages" -> R.string.pos_after_examples
+        "at_depth" -> R.string.pos_at_depth
+        else -> return position
+    }
+    return context.getString(res)
 }
 
 /**
  * 世界书编辑（Compose）：头部设置 + 条目卡片列表 + 全屏条目编辑。
  */
 class WorldInfoEditActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     private var editId: String? = null
 
@@ -123,7 +139,7 @@ class WorldInfoEditActivity : ComponentActivity() {
                             entries = entries.toMutableList()
                         )
                         if (info.name.isBlank()) {
-                            Toast.makeText(this, "名称不能为空", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.world_edit_name_empty), Toast.LENGTH_SHORT).show()
                             return@WorldInfoEditScreen
                         }
                         if (editId != null) {
@@ -131,7 +147,7 @@ class WorldInfoEditActivity : ComponentActivity() {
                         } else {
                             WorldInfoManager.saveNew(this, info)
                         }
-                        Toast.makeText(this, "世界书「${info.name}」已保存", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.world_edit_saved, info.name), Toast.LENGTH_SHORT).show()
                         setResult(RESULT_OK, Intent().putExtra("world_info_id", info.id))
                         finish()
                     }
@@ -160,14 +176,14 @@ private fun WorldInfoEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("编辑世界书") },
+                title = { Text(stringResource(R.string.world_edit_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    TextButton(onClick = onSave) { Text("保存") }
+                    TextButton(onClick = onSave) { Text(stringResource(R.string.btn_save_short)) }
                 }
             )
         }
@@ -180,43 +196,43 @@ private fun WorldInfoEditScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionCard("基本信息") {
+            SectionCard(stringResource(R.string.world_edit_basic)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = onNameChange,
-                    label = { Text("名称") },
+                    label = { Text(stringResource(R.string.world_edit_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = description,
                     onValueChange = onDescriptionChange,
-                    label = { Text("描述") },
+                    label = { Text(stringResource(R.string.world_edit_desc)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
             FoldableSection(
-                title = "提示",
-                preview = "世界书行为对标酒馆（SillyTavern）",
+                title = stringResource(R.string.world_edit_tips_title),
+                preview = stringResource(R.string.world_edit_tips_preview),
                 initiallyExpanded = false
             ) {
                 Text(
-                    text = "关键词触发（支持正则 /.../、whole words 整词匹配、次级关键词过滤、触发概率、常驻、@深度注入）。token 预算可在「设置」中调整。",
+                    text = stringResource(R.string.world_edit_tips_content),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            SectionCard("条目（${entries.size}）") {
+            SectionCard(stringResource(R.string.world_edit_entries, entries.size)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("点击条目编辑，长按删除", style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(R.string.world_edit_entry_hint), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f))
                     TextButton(onClick = onAddEntry) {
-                        Icon(Icons.Filled.Add, contentDescription = "添加条目")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.world_edit_add_entry))
                         Spacer(Modifier.width(4.dp))
-                        Text("添加")
+                        Text(stringResource(R.string.world_edit_add))
                     }
                 }
                 entries.forEachIndexed { index, entry ->
@@ -249,6 +265,7 @@ private fun WorldInfoEditScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val context = LocalContext.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -259,14 +276,14 @@ private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () ->
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = entry.name.ifBlank { "未命名条目" },
+                    text = entry.name.ifBlank { context.getString(R.string.world_edit_unnamed_entry) },
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "${positionLabel(entry.position)} | 优先级 ${entry.priority}",
+                    text = context.getString(R.string.world_edit_entry_meta, positionLabel(context, entry.position), entry.priority),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -297,6 +314,7 @@ private fun EntryEditDialog(
     onDismiss: () -> Unit,
     onSave: (WorldEntry) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(entry.name) }
     var keywords by remember { mutableStateOf(entry.keywords.joinToString(", ")) }
     var secondaryKeys by remember { mutableStateOf(entry.secondaryKeys.joinToString(", ")) }
@@ -319,7 +337,7 @@ private fun EntryEditDialog(
     fun save() {
         onSave(
             entry.copy(
-                name = name.trim().ifBlank { "未命名条目" },
+                name = name.trim().ifBlank { context.getString(R.string.world_edit_unnamed_entry) },
                 keywords = splitKeywords(keywords),
                 secondaryKeys = splitKeywords(secondaryKeys),
                 content = content,
@@ -361,14 +379,14 @@ private fun EntryEditDialog(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
+                    TextButton(onClick = onDismiss) { Text(context.getString(R.string.cancel)) }
                     Text(
-                        text = "编辑条目",
+                        text = context.getString(R.string.world_edit_entry_title),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    TextButton(onClick = { save() }) { Text("保存") }
+                    TextButton(onClick = { save() }) { Text(context.getString(R.string.btn_save_short)) }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -379,43 +397,43 @@ private fun EntryEditDialog(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(context.getString(R.string.world_edit_name)) }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = keywords, onValueChange = { keywords = it }, label = { Text("关键词（逗号分隔，/.../ 视为正则）") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = keywords, onValueChange = { keywords = it }, label = { Text(context.getString(R.string.world_edit_keywords)) }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = secondaryKeys, onValueChange = { secondaryKeys = it }, label = { Text("次级关键词（可选过滤）") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = secondaryKeys, onValueChange = { secondaryKeys = it }, label = { Text(context.getString(R.string.world_edit_secondary_keys)) }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("内容") }, minLines = 4, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text(context.getString(R.string.world_edit_content)) }, minLines = 4, modifier = Modifier.fillMaxWidth())
 
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("注入位置", modifier = Modifier.weight(1f))
+                        Text(context.getString(R.string.world_edit_position), modifier = Modifier.weight(1f))
                         TextButton(onClick = { showPositionPicker = true }) {
-                            Text(positionLabel(position))
+                            Text(positionLabel(context, position))
                         }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = priority, onValueChange = { priority = it }, label = { Text("优先级(Order)") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = probability, onValueChange = { probability = it }, label = { Text("概率%") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = priority, onValueChange = { priority = it }, label = { Text(context.getString(R.string.world_edit_priority)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = probability, onValueChange = { probability = it }, label = { Text(context.getString(R.string.world_edit_probability)) }, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = injectDepth, onValueChange = { injectDepth = it }, label = { Text("注入深度") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = scanDepth, onValueChange = { scanDepth = it }, label = { Text("扫描深度") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = injectDepth, onValueChange = { injectDepth = it }, label = { Text(context.getString(R.string.world_edit_inject_depth)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = scanDepth, onValueChange = { scanDepth = it }, label = { Text(context.getString(R.string.world_edit_scan_depth)) }, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text("角色过滤(user/assistant)") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text("包含组") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text(context.getString(R.string.world_edit_role_filter)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text(context.getString(R.string.world_edit_group)) }, modifier = Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ToggleLabel("常驻", constantActive, { constantActive = it }, Modifier.weight(1f))
-                        ToggleLabel("正则", useRegex, { useRegex = it }, Modifier.weight(1f))
-                        ToggleLabel("大小写", caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_const), constantActive, { constantActive = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_regex), useRegex, { useRegex = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_case), caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ToggleLabel("整词匹配", wholeWords, { wholeWords = it }, Modifier.weight(1f))
-                        ToggleLabel("次级过滤", selective, { selective = it }, Modifier.weight(1f))
-                        ToggleLabel("启用概率", useProbability, { useProbability = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_whole_words), wholeWords, { wholeWords = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_selective), selective, { selective = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_use_prob), useProbability, { useProbability = it }, Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(16.dp))
                 }
@@ -427,14 +445,14 @@ private fun EntryEditDialog(
     if (showPositionPicker) {
         AlertDialog(
             onDismissRequest = { showPositionPicker = false },
-            title = { Text("选择注入位置") },
+            title = { Text(context.getString(R.string.world_edit_pick_position)) },
             text = {
                 Column {
-                    POSITION_OPTIONS.forEach { (value, label) ->
+                    POSITION_OPTIONS.forEach { value ->
                         TextButton(onClick = {
                             position = value
                             showPositionPicker = false
-                        }) { Text(label) }
+                        }) { Text(positionLabel(context, value)) }
                     }
                 }
             },

@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +35,10 @@ import www.cetool.com.ui.theme.SplashText
  * 仅提速：原约 6.6s → 约 3.3s（减少闪烁次数与各段停顿，动画序列不变）。
  */
 class SplashActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     private val brandText = "Simple AI Chat"
     private val initText = "正在初始化环境..."
@@ -80,20 +85,20 @@ class SplashActivity : ComponentActivity() {
                 if (showCrash) {
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text("上次使用出现问题") },
-                        text = { Text("软件上次运行时出现了异常。你可以复制详细信息发给我，我来修复。") },
+                        title = { Text(stringResource(R.string.splash_crash_title)) },
+                        text = { Text(stringResource(R.string.splash_crash_msg)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 CrashReporter.copyAndReport(this@SplashActivity, crashLog ?: "")
                                 showCrash = false
                                 lifecycleScope.launch { playAnimation { text = it } }
-                            }) { Text("复制并反馈") }
+                            }) { Text(stringResource(R.string.splash_crash_copy)) }
                         },
                         dismissButton = {
                             TextButton(onClick = {
                                 showCrash = false
                                 lifecycleScope.launch { playAnimation { text = it } }
-                            }) { Text("忽略") }
+                            }) { Text(stringResource(R.string.splash_crash_ignore)) }
                         }
                     )
                 }

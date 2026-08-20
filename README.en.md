@@ -6,7 +6,9 @@
 
 SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-compatible endpoint, and ships with several free model providers, so you can use it without a key.
 
-**v2.0.1**: The UI has been fully migrated to Jetpack Compose (modern Material 3 visuals: rounded cards, gradient primary color, unified icon set), with major conversation & world-book enhancements (long-press conversation management, multiple world books at once, character card / world book export).
+**v2.1.1**: The UI has been fully migrated to Jetpack Compose (modern Material 3 visuals: rounded cards, gradient primary color, unified icon set), with major conversation & world-book enhancements (long-press conversation management, multiple world books at once, character card / world book export).
+
+> **v2.1.1** — Added **UI language switching (Chinese / English)** in Settings, follows the system language by default.
 
 ---
 
@@ -34,6 +36,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 | Markdown chat | Renders Markdown in conversation content |
 | Other settings | Font size, background image/color (cover-crop or tile at original ratio), AI nickname & avatar, system prompt variables like `{{cur_date}}`, World Info token budget |
 | All-new Compose UI | Every screen in Jetpack Compose + Material 3: rounded card system, gradient primary, unified Material Icons (zero emoji), faster splash (~6.6s → 3.3s with identical visuals) |
+| **Multi-language UI** | Switch **Chinese / English** in Settings (default: follow system); the default system prompt and adventure DM prompt are also bilingual |
 | Fully local | All data stays on your device |
 
 ---
@@ -54,7 +57,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 
 Get the latest APK from the [Releases page](https://github.com/5h1iky/Simple-Ai-Chat/releases).
 
-**Current version: v2.0.1**
+**Current version: v2.1.1**
 
 > Requires Android 7.0 (API 24) or above.
 

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -76,6 +77,10 @@ import java.io.ByteArrayOutputStream
  */
 class SettingsActivity : ComponentActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
+
     private val gson = Gson()
 
     // ─── UI 状态（Compose 可观察） ───
@@ -115,6 +120,7 @@ class SettingsActivity : ComponentActivity() {
     private var showModelOptions by mutableStateOf(false)
     private var showModelTip by mutableStateOf(false)
     private var showProviderSelect by mutableStateOf(false)
+    private var showLanguageSelect by mutableStateOf(false)
 
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -397,7 +403,7 @@ class SettingsActivity : ComponentActivity() {
             val inputStream = contentResolver.openInputStream(uri) ?: return
             val bitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
-            if (bitmap == null) { Toast.makeText(this, "图片无效", Toast.LENGTH_SHORT).show(); return }
+            if (bitmap == null) { Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show(); return }
 
             val maxSize = 1024
             val scale = Math.min(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height).coerceAtMost(1f)
@@ -415,9 +421,9 @@ class SettingsActivity : ComponentActivity() {
                     if (idx >= 0) bgImageName = it.getString(idx)
                 }
             }
-            Toast.makeText(this, "背景图片已选择", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_bg_picked), Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, "图片加载失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_image_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -426,7 +432,7 @@ class SettingsActivity : ComponentActivity() {
             val inputStream = contentResolver.openInputStream(uri) ?: return
             val bitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
-            if (bitmap == null) { Toast.makeText(this, "图片无效", Toast.LENGTH_SHORT).show(); return }
+            if (bitmap == null) { Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show(); return }
 
             val maxSize = 256
             val scale = Math.min(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height).coerceAtMost(1f)
@@ -442,9 +448,9 @@ class SettingsActivity : ComponentActivity() {
             } else {
                 userAvatarBase64 = base64
             }
-            Toast.makeText(this, "头像已选择", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_avatar_picked, if (isAi) "AI " else "我的"), Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, "头像加载失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_avatar_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -493,7 +499,7 @@ class SettingsActivity : ComponentActivity() {
                 .apply()
         }
 
-        Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
         startActivity(Intent(this, ChatActivity::class.java))
         finish()
     }
@@ -516,21 +522,21 @@ class SettingsActivity : ComponentActivity() {
         ) {
             // 页面大标题
             Text(
-                text = "设置",
+                text = getString(R.string.settings_page_title),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)
             )
             Text(
-                text = "个性化你的 SAChat",
+                text = getString(R.string.settings_page_subtitle),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 20.dp)
             )
 
             // ── 分组 1：API 配置 ──
-            SettingsCard(title = "API 配置") {
+            SettingsCard(title = getString(R.string.settings_group_api)) {
                 // 免费模式（OpenKilo/OpenCode Zen）隐藏 API 列表与添加按钮（与旧版一致）
                 if (!isFreeMode) {
                     // API 条目列表
@@ -554,7 +560,7 @@ class SettingsActivity : ComponentActivity() {
                     }) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("添加 API")
+                        Text(getString(R.string.settings_add_api))
                     }
                 }
                 // 预设服务商
@@ -594,19 +600,19 @@ class SettingsActivity : ComponentActivity() {
             Spacer(Modifier.height(16.dp))
 
             // ── 分组 2：字体大小 ──
-            SettingsCard(title = "字体大小") {
+            SettingsCard(title = getString(R.string.settings_group_font)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = fontSizeText,
                         onValueChange = { fontSizeText = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("大小（sp）") },
+                        label = { Text(getString(R.string.settings_font_size_hint)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(Modifier.width(16.dp))
                     Text(
-                        text = "预览",
+                        text = getString(R.string.settings_font_preview),
                         fontSize = (fontSizeText.toIntOrNull() ?: 15).sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -616,66 +622,66 @@ class SettingsActivity : ComponentActivity() {
             Spacer(Modifier.height(16.dp))
 
             // ── 分组 3：提示词管理 ──
-            SettingsCard(title = "提示词管理") {
+            SettingsCard(title = getString(R.string.settings_group_prompt)) {
                 OutlinedTextField(
                     value = systemPromptText,
                     onValueChange = { systemPromptText = it },
-                    label = { Text("默认系统提示词") },
+                    label = { Text(getString(R.string.settings_system_prompt_label)) },
                     minLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
-                HintText("仅在默认聊天模式起效，角色模式只按角色卡提示词来")
+                HintText(getString(R.string.settings_system_prompt_note))
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = maxHistoryText,
                     onValueChange = { maxHistoryText = it.filter { c -> c.isDigit() }.take(3) },
-                    label = { Text(stringResource(R.string.label_max_history)) },
+                    label = { Text(getString(R.string.label_max_history)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
-                HintText(stringResource(R.string.max_history_note))
+                HintText(getString(R.string.max_history_note))
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = worldBudgetText,
                     onValueChange = { worldBudgetText = it.filter { c -> c.isDigit() }.take(5) },
-                    label = { Text("世界书 token 预算（酒馆 Context %/Budget 对齐）") },
+                    label = { Text(getString(R.string.settings_world_budget_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
-                HintText("世界书命中条目按此预算注入上下文，超出部分不注入（常驻条目优先）")
+                HintText(getString(R.string.settings_world_budget_note))
             }
 
             Spacer(Modifier.height(16.dp))
 
             // ── 分组 4：联网搜索配置 ──
-            SettingsCard(title = "联网搜索配置") {
+            SettingsCard(title = getString(R.string.settings_group_search)) {
                 OutlinedTextField(
                     value = webSearchUrlText,
                     onValueChange = { webSearchUrlText = it },
-                    label = { Text("搜索 API 地址") },
+                    label = { Text(getString(R.string.settings_search_url_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
-                HintText("配置后可在右侧三点菜单中开启联网搜索")
+                HintText(getString(R.string.settings_search_note))
             }
 
             Spacer(Modifier.height(16.dp))
 
             // ── 分组 5：背景图片 ──
-            SettingsCard(title = "背景图片") {
+            SettingsCard(title = getString(R.string.settings_group_bg)) {
                 Row {
                     BackgroundModeChip(
-                        label = "自动适应",
+                        label = getString(R.string.settings_bg_color),
                         selected = bgMode != "image",
                         onClick = { bgMode = "color" }
                     )
                     Spacer(Modifier.width(8.dp))
                     BackgroundModeChip(
-                        label = "图片填充",
+                        label = getString(R.string.settings_bg_image),
                         selected = bgMode == "image",
                         onClick = { bgMode = "image" }
                     )
@@ -691,9 +697,9 @@ class SettingsActivity : ComponentActivity() {
                             onClick = { imagePickerLauncher.launch(arrayOf("image/png")) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("选择 PNG 图片") }
+                        ) { Text(getString(R.string.settings_pick_png)) }
                         Text(
-                            text = bgImageName ?: "未选择图片",
+                            text = bgImageName ?: getString(R.string.settings_no_image),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -701,13 +707,13 @@ class SettingsActivity : ComponentActivity() {
                         Spacer(Modifier.height(8.dp))
                         Row {
                             BackgroundModeChip(
-                                label = "适应比例",
+                                label = getString(R.string.settings_bg_fit),
                                 selected = bgScale != "fill",
                                 onClick = { bgScale = "fit" }
                             )
                             Spacer(Modifier.width(8.dp))
                             BackgroundModeChip(
-                                label = "原比例填充",
+                                label = getString(R.string.settings_bg_fill),
                                 selected = bgScale == "fill",
                                 onClick = { bgScale = "fill" }
                             )
@@ -719,7 +725,16 @@ class SettingsActivity : ComponentActivity() {
             Spacer(Modifier.height(16.dp))
 
             // ── 分组 6：聊天昵称 ──
-            SettingsCard(title = "聊天昵称") {
+            SettingsCard(title = getString(R.string.settings_group_nickname)) {
+                // 语言切换（中英文，默认跟随系统）
+                SettingsRow(
+                    icon = Icons.Filled.Language,
+                    title = getString(R.string.settings_language),
+                    value = LocaleHelper.languageLabel(this@SettingsActivity),
+                    onClick = { showLanguageSelect = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = userNameText,
                     onValueChange = { userNameText = it },
@@ -742,13 +757,13 @@ class SettingsActivity : ComponentActivity() {
                     onClick = { userAvatarPickerLauncher.launch(arrayOf("image/*")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
-                ) { Text(if (userAvatarBase64 != null) "我的头像已选择" else "选择我的头像") }
+                ) { Text(if (userAvatarBase64 != null) getString(R.string.settings_avatar_picked, "我的") else getString(R.string.settings_pick_user_avatar)) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = { aiAvatarPickerLauncher.launch(arrayOf("image/*")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
-                ) { Text(if (aiAvatarBase64 != null) "AI 头像已选择" else "选择 AI 头像") }
+                ) { Text(if (aiAvatarBase64 != null) getString(R.string.settings_avatar_picked, "AI ") else getString(R.string.settings_pick_ai_avatar)) }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -763,7 +778,7 @@ class SettingsActivity : ComponentActivity() {
             ) {
                 Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("保存设置", fontSize = 16.sp)
+                Text(getString(R.string.settings_save), fontSize = 16.sp)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -845,6 +860,59 @@ class SettingsActivity : ComponentActivity() {
                 onDismiss = { showModelOptions = false }
             )
         }
+        if (showLanguageSelect) {
+            LanguageSelectDialog()
+        }
+    }
+
+    /** 语言选择：跟随系统（默认）/ 中文 / English，切换后立即生效（清栈回聊天页） */
+    @Composable
+    private fun LanguageSelectDialog() {
+        val ctx = this@SettingsActivity
+        val current = LocaleHelper.getLanguagePref(ctx)
+        val options = listOf(
+            SettingsKeys.LANGUAGE_SYSTEM to getString(R.string.settings_language_system),
+            SettingsKeys.LANGUAGE_ZH to "中文",
+            SettingsKeys.LANGUAGE_EN to "English"
+        )
+        AlertDialog(
+            onDismissRequest = { showLanguageSelect = false },
+            title = { Text(getString(R.string.settings_language)) },
+            text = {
+                Column {
+                    Text(
+                        text = getString(R.string.settings_language_tip),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    options.forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    ctx.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                                        .edit().putString(SettingsKeys.KEY_LANGUAGE, value).apply()
+                                    showLanguageSelect = false
+                                    // 清任务栈重建：所有页面按新语言重新创建
+                                    val intent = Intent(ctx, ChatActivity::class.java).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                    }
+                                    ctx.startActivity(intent)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = value == current, onClick = null)
+                            Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageSelect = false }) { Text(getString(R.string.cancel)) }
+            }
+        )
     }
 
     private fun providerModeLabel(): String {
@@ -963,7 +1031,7 @@ class SettingsActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (isActive) "当前使用" else entry.model.ifBlank { "未配置" },
+                        text = if (isActive) getString(R.string.settings_in_use) else entry.model.ifBlank { getString(R.string.settings_not_configured) },
                         fontSize = 12.sp,
                         color = if (isActive) {
                             MaterialTheme.colorScheme.primary
@@ -973,7 +1041,7 @@ class SettingsActivity : ComponentActivity() {
                     )
                 }
                 TextButton(onClick = onDelete) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(getString(R.string.settings_delete), color = MaterialTheme.colorScheme.error)
                 }
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1037,13 +1105,13 @@ private fun ApiEntryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (index != null) "编辑 API" else "添加 API") },
+        title = { Text(if (index != null) context.getString(R.string.settings_edit_api) else context.getString(R.string.settings_add_api_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("标签（如：主力GPT）") },
+                    label = { Text(context.getString(R.string.settings_label_hint)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1053,7 +1121,7 @@ private fun ApiEntryDialog(
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("API 地址") },
+                    label = { Text(context.getString(R.string.label_api_url)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1063,7 +1131,7 @@ private fun ApiEntryDialog(
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
-                    label = { Text("API Key") },
+                    label = { Text(context.getString(R.string.label_api_key)) },
                     singleLine = true,
                     enabled = keyEnabled,
                     modifier = Modifier
@@ -1073,7 +1141,7 @@ private fun ApiEntryDialog(
                 )
                 if (!keyEnabled) {
                     Text(
-                        text = "免费服务无需密钥，由第三方提供，稳定性有限",
+                        text = context.getString(R.string.provider_free_hint),
                         fontSize = 12.sp,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 10.dp)
@@ -1082,7 +1150,7 @@ private fun ApiEntryDialog(
                 OutlinedTextField(
                     value = model,
                     onValueChange = { model = it },
-                    label = { Text("模型名称") },
+                    label = { Text(context.getString(R.string.label_model)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -1092,14 +1160,14 @@ private fun ApiEntryDialog(
         confirmButton = {
             TextButton(onClick = {
                 if (label.isBlank()) {
-                    Toast.makeText(context, "标签不能为空", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.settings_label_empty), Toast.LENGTH_SHORT).show()
                 } else {
                     onConfirm(label.trim(), url.trim(), key.trim(), model.trim())
                 }
-            }) { Text("确定") }
+            }) { Text(context.getString(R.string.btn_ok)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(context.getString(R.string.cancel)) }
         }
     )
 }
@@ -1140,7 +1208,7 @@ private fun ModelSelectDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.cancel)) }
         }
     )
 }

@@ -9,7 +9,9 @@
 
 SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，内置了多个免费模型，无需密钥即可使用。
 
-**v2.0.1**：界面已全面迁移至 Jetpack Compose（Material 3 现代视觉：圆角卡片、渐变主色、统一图标体系），对话与世界书管理大幅增强（长按对话管理、多本世界书同开、角色卡/世界书导出）。
+**v2.1.1**：界面已全面迁移至 Jetpack Compose（Material 3 现代视觉：圆角卡片、渐变主色、统一图标体系），对话与世界书管理大幅增强（长按对话管理、多本世界书同开、角色卡/世界书导出）。
+
+> **v2.1.1** — Added **UI language switching (中文 / English)** in Settings, follows the system language by default.
 
 ---
 
@@ -37,6 +39,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 | Markdown对话 | 对话内容渲染 Markdown |
 | 其他设置 | 字号调节、背景图片/颜色（等比裁剪/原比例平铺）、AI 昵称头像、系统提示词变量 `{{cur_date}}` 等、世界书 token 预算 |
 | 全新 Compose UI | 全页面 Jetpack Compose + Material 3：圆角卡片体系、渐变主色、统一 Material Icons（零 emoji）、启动页提速（约 6.6s → 3.3s 且视觉不变） |
+| **多语言 UI** | 设置中可切换 **中文 / English**（默认跟随系统）；默认系统提示词、冒险 DM 指令同步双语 |
 | 完全本地 | 所有数据存于设备本地 |
 
 ---
@@ -57,7 +60,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 前往 [Releases 页面](https://github.com/5h1iky/Simple-Ai-Chat/releases) 下载最新版 APK 安装包。
 
-**当前版本：v2.0.1**
+**当前版本：v2.1.1**
 
 > 需要 Android 7.0（API 24）及以上设备。
 

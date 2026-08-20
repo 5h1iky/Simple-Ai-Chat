@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -48,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import www.cetool.com.importer.WorldInfoImporter
@@ -62,6 +64,10 @@ import www.cetool.com.ui.theme.SAChatTheme
  * - MANAGE 模式：点按 → 编辑，长按菜单 → 编辑/删除
  */
 class WorldInfoListActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     private var isManageMode = false
     // Compose 可观察刷新计数（修复：remember 快照导致编辑返回后列表不刷新）
@@ -85,9 +91,9 @@ class WorldInfoListActivity : ComponentActivity() {
         if (uri != null && json != null) {
             try {
                 contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                Toast.makeText(this, "世界书已导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.world_list_exported), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.world_list_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -95,7 +101,7 @@ class WorldInfoListActivity : ComponentActivity() {
     private fun onExport(worldInfoId: String, name: String) {
         val json = WorldInfoManager.rawJson(this, worldInfoId)
         if (json == null) {
-            Toast.makeText(this, "导出失败：无法读取世界书", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.world_list_export_unreadable), Toast.LENGTH_SHORT).show()
             return
         }
         exportPendingJson = json
@@ -128,7 +134,7 @@ class WorldInfoListActivity : ComponentActivity() {
                     onEdit = { id -> openEditor(id) },
                     onDelete = { id ->
                         WorldInfoManager.delete(this, id)
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.char_list_deleted), Toast.LENGTH_SHORT).show()
                         refreshTick.intValue++
                     },
                     onExport = { info -> onExport(info.id, info.name) },
@@ -153,8 +159,10 @@ class WorldInfoListActivity : ComponentActivity() {
             when (val result = WorldInfoImporter.parse(json)) {
                 is WorldInfoImporter.ImportResult.Success -> {
                     WorldInfoManager.saveNew(this, result.info)
-                    val warnText = if (result.warnings.isNotEmpty()) "（${result.warnings.size} 条警告）" else ""
-                    Toast.makeText(this, "世界书「${result.info.name}」已导入$warnText", Toast.LENGTH_SHORT).show()
+                    val warnText = if (result.warnings.isNotEmpty()) {
+                        getString(R.string.world_import_warn_suffix, result.warnings.size)
+                    } else ""
+                    Toast.makeText(this, getString(R.string.world_import_ok, result.info.name, warnText), Toast.LENGTH_SHORT).show()
                     refreshTick.intValue++
                     if (!isManageMode) {
                         setResult(RESULT_OK, Intent().putExtra("world_info_id", result.info.id))
@@ -162,11 +170,11 @@ class WorldInfoListActivity : ComponentActivity() {
                     }
                 }
                 is WorldInfoImporter.ImportResult.Failure -> {
-                    Toast.makeText(this, "导入失败：${result.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.world_import_failed, result.message), Toast.LENGTH_LONG).show()
                 }
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.world_import_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 }
@@ -201,16 +209,16 @@ private fun WorldInfoListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isManageMode) "世界书管理" else "选择世界书") },
+                title = { Text(if (isManageMode) stringResource(R.string.world_list_title_manage) else stringResource(R.string.world_list_title_select)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    TextButton(onClick = onImport) { Text("导入") }
+                    TextButton(onClick = onImport) { Text(stringResource(R.string.char_list_import)) }
                     IconButton(onClick = onNew) {
-                        Icon(Icons.Filled.Add, contentDescription = "新建世界书")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.world_list_new))
                     }
                 }
             )
@@ -222,7 +230,7 @@ private fun WorldInfoListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无世界书，点击右上角 + 新建或导入",
+                    text = stringResource(R.string.world_list_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -257,14 +265,14 @@ private fun WorldInfoListScreen(
                                 )
                                 // 世界书不在本页启用：提示用户在对话侧（长按对话 → 世界书设置）启用
                                 Text(
-                                    text = "长按对话启用",
+                                    text = stringResource(R.string.world_list_longpress_hint),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "${info.entryCount} 条目",
+                                text = stringResource(R.string.world_list_entries, info.entryCount),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -273,9 +281,9 @@ private fun WorldInfoListScreen(
                             val titles = convTitlesByWorld[info.id] ?: emptyList()
                             Text(
                                 text = if (titles.isEmpty()) {
-                                    "暂无对话启用"
+                                    stringResource(R.string.world_list_no_conv)
                                 } else {
-                                    "启用对话：${titles.joinToString("、")}"
+                                    stringResource(R.string.world_list_used_by, titles.joinToString("、"))
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (titles.isEmpty()) {
@@ -312,22 +320,22 @@ private fun WorldInfoListScreen(
                     TextButton(onClick = {
                         onEdit(info.id)
                         pendingDelete = null
-                    }) { Text("编辑世界书") }
+                    }) { Text(stringResource(R.string.world_list_edit)) }
                     HorizontalDivider()
                     TextButton(onClick = {
                         onExport(info)
                         pendingDelete = null
-                    }) { Text("导出世界书") }
+                    }) { Text(stringResource(R.string.world_list_export)) }
                     HorizontalDivider()
                     TextButton(onClick = {
                         onDelete(info.id)
                         pendingDelete = null
-                    }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }

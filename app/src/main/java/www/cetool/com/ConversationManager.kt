@@ -19,16 +19,9 @@ import www.cetool.com.network.MessageItem
 
 object ConversationManager {
 
-    /** 冒险模式 DM/GM 系统指令 */
-    const val ADVENTURE_DM_PROMPT = """你是一名经验丰富的故事主持人（DM/GM）。你将主持一场文字冒险（跑团）：
-1. 根据世界设定与角色卡，推进剧情、描写场景、扮演所有 NPC 与角色。
-2. 用语言、行为、剧情推动互动，每次回复保持沉浸感，不要跳出角色。
-3. 玩家可以用「语言」「行为」「剧情」三种方式输入：
-   - [语言]：说一段话（角色会回应）
-   - [行为]：做一个动作（描述结果）
-   - [剧情]：引导剧情走向（控制故事节奏）
-4. 重要剧情节点给出选择支（A/B/C）让玩家决策。
-5. 保持世界观一致，善用世界书中的设定。"""
+    /** 冒险模式 DM/GM 系统指令（中英双语资源，跟随 UI 语言） */
+    val ADVENTURE_DM_PROMPT: String
+        get() = appContext.getString(R.string.adventure_dm_prompt)
 
     private const val PREFS_NAME = "conversations"
     private const val KEY_DATA = "conversation_data"

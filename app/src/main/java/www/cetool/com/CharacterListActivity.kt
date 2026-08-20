@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.graphics.BitmapFactory
@@ -67,6 +69,10 @@ import www.cetool.com.importer.TavernCardImporter
  * - MANAGE 模式：点按 → 编辑，长按菜单 → 编辑/删除
  */
 class CharacterListActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     private var isManageMode = false
     private var exportPendingJson: String? = null
@@ -90,9 +96,9 @@ class CharacterListActivity : ComponentActivity() {
         if (uri != null && json != null) {
             try {
                 contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                Toast.makeText(this, "角色卡已导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.char_list_exported), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.char_list_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -100,7 +106,7 @@ class CharacterListActivity : ComponentActivity() {
     private fun onExport(characterId: String, name: String) {
         val json = CharacterManager.rawJson(this, characterId)
         if (json == null) {
-            Toast.makeText(this, "导出失败：无法读取角色卡", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_list_export_unreadable), Toast.LENGTH_SHORT).show()
             return
         }
         exportPendingJson = json
@@ -131,7 +137,7 @@ class CharacterListActivity : ComponentActivity() {
                     onEdit = { id -> openEditor(id) },
                     onDelete = { id ->
                         CharacterManager.delete(this, id)
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.char_list_deleted), Toast.LENGTH_SHORT).show()
                     },
                     onExport = { char -> onExport(char.id, char.name) },
                     onNew = { openEditor(null) },
@@ -154,21 +160,21 @@ class CharacterListActivity : ComponentActivity() {
             val json = inputStream.bufferedReader().use { it.readText() }
             val card = TavernCardImporter.parse(json).getOrNull()
             if (card == null) {
-                Toast.makeText(this, "角色卡格式无效", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.char_list_invalid), Toast.LENGTH_LONG).show()
                 return
             }
             val id = CharacterManager.save(this, json) ?: run {
-                Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.import_save_failed), Toast.LENGTH_SHORT).show()
                 return
             }
-            Toast.makeText(this, "角色「${card.data.name}」已导入", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_list_imported, card.data.name), Toast.LENGTH_SHORT).show()
             refresh()
             if (!isManageMode) {
                 setResult(RESULT_OK, Intent().putExtra("character_id", id))
                 finish()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_list_import_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -204,16 +210,16 @@ private fun CharacterListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isManageMode) "角色管理" else "选择角色") },
+                title = { Text(if (isManageMode) stringResource(R.string.char_list_title_manage) else stringResource(R.string.char_list_title_select)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    TextButton(onClick = onImport) { Text("导入") }
+                    TextButton(onClick = onImport) { Text(stringResource(R.string.char_list_import)) }
                     IconButton(onClick = onNew) {
-                        Icon(Icons.Filled.Add, contentDescription = "新建角色卡")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.char_list_new))
                     }
                 }
             )
@@ -227,7 +233,7 @@ private fun CharacterListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无角色卡，点击右上角 + 新建或导入",
+                    text = stringResource(R.string.char_list_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -260,23 +266,23 @@ private fun CharacterListScreen(
                     TextButton(onClick = {
                         onEdit(char.id)
                         pendingDelete = null
-                    }) { Text("编辑角色卡") }
+                    }) { Text(stringResource(R.string.char_list_edit)) }
                     HorizontalDivider()
                     TextButton(onClick = {
                         onExport(char)
                         pendingDelete = null
-                    }) { Text("导出角色卡") }
+                    }) { Text(stringResource(R.string.char_list_export)) }
                     HorizontalDivider()
                     TextButton(onClick = {
                         onDelete(char.id)
                         pendingDelete = null
                         CharacterListActivity.bumpRefresh()
-                    }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -353,7 +359,7 @@ fun CharacterAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = "头像",
+                contentDescription = stringResource(R.string.msg_avatar_desc),
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -365,7 +371,7 @@ fun CharacterAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Filled.Person,
-                        contentDescription = "头像",
+                        contentDescription = stringResource(R.string.msg_avatar_desc),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(18.dp)
                     )

@@ -11,6 +11,10 @@ import java.util.Locale
 
 class CrashReporter : Application() {
 
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleHelper.apply(base))
+    }
+
     companion object {
         private const val FILE_NAME = "crash_log.txt"
         private const val BILIBILI_URL = "https://space.bilibili.com/432122433"

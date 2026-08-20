@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import io.noties.markwon.Markwon
+import www.cetool.com.R
 import www.cetool.com.model.Message
 import www.cetool.com.ui.theme.SAChatTheme
 
@@ -214,7 +216,7 @@ private fun BindingChip(icon: ImageVector, text: String, onClick: () -> Unit) {
 @Composable
 private fun SystemPromptFold(systemPrompt: String) {
     FoldableSection(
-        title = "系统提示词（已融合设定）",
+        title = stringResource(R.string.msg_system_prompt_fold),
         preview = systemPrompt
     ) {
         ChatMarkdown(text = systemPrompt, fontSize = 13)
@@ -278,7 +280,7 @@ private fun ChatAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = "头像",
+                contentDescription = stringResource(R.string.msg_avatar_desc),
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -313,7 +315,7 @@ private fun ChatBubble(
         // 思考内容折叠块
         if (!isUser && message.reasoningContent.isNotBlank()) {
             FoldableSection(
-                title = "思考",
+                title = stringResource(R.string.msg_thinking_label),
                 preview = message.reasoningContent
             ) {
                 ChatMarkdown(text = message.reasoningContent, fontSize = (fontSize - 1).coerceAtLeast(11))
@@ -333,7 +335,7 @@ private fun ChatBubble(
             if (message.content.isEmpty() && message.reasoningContent.isBlank()) {
                 // 流式中：思考中…
                 Text(
-                    text = "思考中…",
+                    text = stringResource(R.string.msg_thinking_dots),
                     style = MaterialTheme.typography.bodyMedium,
                     color = textColor,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -372,7 +374,7 @@ private fun ChatBubble(
                                         )
                                         Spacer(Modifier.width(4.dp))
                                         Text(
-                                            text = "角色卡（点击查看）",
+                                            text = stringResource(R.string.msg_card_marker),
                                             style = MaterialTheme.typography.labelMedium,
                                             color = textColor
                                         )

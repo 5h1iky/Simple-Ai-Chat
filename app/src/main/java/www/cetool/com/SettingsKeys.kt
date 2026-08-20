@@ -31,6 +31,12 @@ object SettingsKeys {
     // 世界书 token 预算（酒馆 Context %/Budget 对齐，默认 1500 tokens）
     const val KEY_WORLDINFO_BUDGET = "worldinfo_budget"
 
+    // ─── UI 语言（中英文切换，默认跟随系统） ───
+    const val KEY_LANGUAGE = "ui_language"
+    const val LANGUAGE_SYSTEM = "system"
+    const val LANGUAGE_ZH = "zh"
+    const val LANGUAGE_EN = "en"
+
     // ─── Free Gateway Integration ──────────────────────────────────
     const val KEY_PROVIDER_MODE = "pref_provider_mode"
     const val KEY_PROVIDER_MANUAL_SNAPSHOT = "pref_provider_manual_snapshot"

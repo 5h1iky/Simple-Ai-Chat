@@ -1,5 +1,6 @@
 package www.cetool.com
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -70,6 +71,10 @@ import java.io.ByteArrayOutputStream
  * 结构化字段存 extensions（D1 决策），旧字段同步兜底（description/personality）。
  */
 class CharacterEditActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.apply(newBase))
+    }
 
     private var editCharacterId: String? = null
     private var avatarState: androidx.compose.runtime.MutableState<String?>? = null
@@ -149,14 +154,14 @@ class CharacterEditActivity : ComponentActivity() {
             val state = avatarState
             state?.value = base64
         } catch (e: Exception) {
-            Toast.makeText(this, "头像加载失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_edit_avatar_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun saveCharacter(state: CharacterEditState, avatar: String?) {
         val name = state.name.trim()
         if (name.isBlank()) {
-            Toast.makeText(this, "角色名不能为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_edit_name_empty), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -207,7 +212,7 @@ class CharacterEditActivity : ComponentActivity() {
         } ?: CharacterManager.save(this, json)
 
         if (id != null) {
-            Toast.makeText(this, "角色「$name」已保存", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.char_edit_saved, name), Toast.LENGTH_SHORT).show()
             val intent = Intent().apply {
                 putExtra("character_id", id)
                 putExtra("is_edit", editCharacterId != null)
@@ -215,7 +220,7 @@ class CharacterEditActivity : ComponentActivity() {
             setResult(RESULT_OK, intent)
             finish()
         } else {
-            Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.import_save_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -292,23 +297,23 @@ private fun CharacterEditScreen(
             userRelationType = state.userRelationType, userInteractionModel = state.userInteractionModel,
             userRelationBottomLine = state.userRelationBottomLine, keyEvents = state.keyEvents
         )
-        CharacterCompiler.compileMarkdown(state.name.ifBlank { "未命名角色" }, fields)
+        CharacterCompiler.compileMarkdown(state.name.ifBlank { context.getString(R.string.char_edit_unnamed) }, fields)
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (previewMode) "效果预览" else "编辑角色卡") },
+                title = { Text(if (previewMode) context.getString(R.string.char_edit_preview) else context.getString(R.string.char_edit_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = context.getString(R.string.back))
                     }
                 },
                 actions = {
                     TextButton(onClick = { previewMode = !previewMode }) {
-                        Text(if (previewMode) "编辑" else "预览")
+                        Text(if (previewMode) context.getString(R.string.char_edit_mode_edit) else context.getString(R.string.char_edit_mode_preview))
                     }
-                    TextButton(onClick = onSave) { Text("保存") }
+                    TextButton(onClick = onSave) { Text(context.getString(R.string.btn_save_short)) }
                 }
             )
         }
@@ -338,25 +343,25 @@ private fun CharacterEditScreen(
                     CharacterAvatar(avatar, Modifier.size(64.dp))
                     Spacer(Modifier.width(12.dp))
                     TextButton(onClick = onAvatarPicked) {
-                        Text(if (avatar != null) "更换头像" else "选择头像")
+                        Text(if (avatar != null) context.getString(R.string.char_edit_change_avatar) else context.getString(R.string.char_edit_pick_avatar))
                     }
                 }
 
-                SectionCard("基础信息") {
-                    FormField("姓名", state.name) { state.name = it }
+                SectionCard(context.getString(R.string.field_basic)) {
+                    FormField(context.getString(R.string.field_name), state.name) { state.name = it }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FormField("年龄", state.age, Modifier.weight(1f)) { state.age = it }
-                        FormField("性别", state.gender, Modifier.weight(1f)) { state.gender = it }
+                        FormField(context.getString(R.string.field_age), state.age, Modifier.weight(1f)) { state.age = it }
+                        FormField(context.getString(R.string.field_gender), state.gender, Modifier.weight(1f)) { state.gender = it }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FormField("种族", state.race, Modifier.weight(1f)) { state.race = it }
-                        FormField("出生地", state.birthplace, Modifier.weight(1f)) { state.birthplace = it }
+                        FormField(context.getString(R.string.field_race), state.race, Modifier.weight(1f)) { state.race = it }
+                        FormField(context.getString(R.string.field_birthplace), state.birthplace, Modifier.weight(1f)) { state.birthplace = it }
                     }
-                    FormField("职业", state.occupation) { state.occupation = it }
-                    FormField("社会阶层", state.socialClass) { state.socialClass = it }
+                    FormField(context.getString(R.string.field_occupation), state.occupation) { state.occupation = it }
+                    FormField(context.getString(R.string.field_social_class), state.socialClass) { state.socialClass = it }
                 }
 
-                SectionCard("身份标签") {
+                SectionCard(context.getString(R.string.field_identity_tags)) {
                     if (state.identityTags.isNotEmpty()) {
                         TagRow(tags = state.identityTags)
                         Spacer(Modifier.height(8.dp))
@@ -365,7 +370,7 @@ private fun CharacterEditScreen(
                         OutlinedTextField(
                             value = tagInput,
                             onValueChange = { tagInput = it },
-                            label = { Text("输入标签，回车添加") },
+                            label = { Text(context.getString(R.string.field_tags_hint)) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -376,48 +381,48 @@ private fun CharacterEditScreen(
                             }
                             tagInput = ""
                         }) {
-                            Icon(Icons.Filled.Close, contentDescription = "添加")
+                            Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.field_identity_tags))
                         }
                     }
                 }
 
-                SectionCard("外貌气质") {
-                    FormField("身高体型", state.heightBuild) { state.heightBuild = it }
-                    FormField("标志性特征", state.iconicFeatures) { state.iconicFeatures = it }
-                    FormField("衣着风格", state.clothingStyle) { state.clothingStyle = it }
-                    FormField("整体气质", state.overallVibe) { state.overallVibe = it }
+                SectionCard(context.getString(R.string.field_appearance)) {
+                    FormField(context.getString(R.string.field_height_build), state.heightBuild) { state.heightBuild = it }
+                    FormField(context.getString(R.string.field_iconic_features), state.iconicFeatures) { state.iconicFeatures = it }
+                    FormField(context.getString(R.string.field_clothing_style), state.clothingStyle) { state.clothingStyle = it }
+                    FormField(context.getString(R.string.field_overall_vibe), state.overallVibe) { state.overallVibe = it }
                 }
 
-                SectionCard("性格特征") {
-                    FormField("外在性格", state.externalPersonality) { state.externalPersonality = it }
-                    FormField("内在性格", state.internalPersonality) { state.internalPersonality = it }
-                    FormField("核心欲望", state.coreDesire) { state.coreDesire = it }
-                    FormField("恐惧与弱点", state.fearWeakness) { state.fearWeakness = it }
-                    FormField("道德观念", state.moralValues) { state.moralValues = it }
-                    FormField("怪癖", state.quirk) { state.quirk = it }
+                SectionCard(context.getString(R.string.field_personality)) {
+                    FormField(context.getString(R.string.field_ext_personality), state.externalPersonality) { state.externalPersonality = it }
+                    FormField(context.getString(R.string.field_int_personality), state.internalPersonality) { state.internalPersonality = it }
+                    FormField(context.getString(R.string.field_core_desire), state.coreDesire) { state.coreDesire = it }
+                    FormField(context.getString(R.string.field_fear_weakness), state.fearWeakness) { state.fearWeakness = it }
+                    FormField(context.getString(R.string.field_moral_values), state.moralValues) { state.moralValues = it }
+                    FormField(context.getString(R.string.field_quirk), state.quirk) { state.quirk = it }
                 }
 
-                SectionCard("技能与经历") {
-                    FormField("技能专长", state.skills) { state.skills = it }
-                    FormField("背景故事", state.backgroundStory) { state.backgroundStory = it }
-                    FormField("人际关系", state.relationships) { state.relationships = it }
-                    FormField("说话方式", state.speakingStyle) { state.speakingStyle = it }
-                    FormField("典型反应", state.typicalReactions) { state.typicalReactions = it }
+                SectionCard(context.getString(R.string.field_skills_history)) {
+                    FormField(context.getString(R.string.field_skills), state.skills) { state.skills = it }
+                    FormField(context.getString(R.string.field_background), state.backgroundStory) { state.backgroundStory = it }
+                    FormField(context.getString(R.string.field_relationships), state.relationships) { state.relationships = it }
+                    FormField(context.getString(R.string.field_speaking_style), state.speakingStyle) { state.speakingStyle = it }
+                    FormField(context.getString(R.string.field_typical_reactions), state.typicalReactions) { state.typicalReactions = it }
                 }
 
-                SectionCard("角色记忆（记忆封存写回目标）") {
-                    FormField("与用户关系类型", state.userRelationType) { state.userRelationType = it }
-                    FormField("与用户相处模式", state.userInteractionModel) { state.userInteractionModel = it }
-                    FormField("与用户关系底线", state.userRelationBottomLine) { state.userRelationBottomLine = it }
-                    FormField("关键事件", state.keyEvents) { state.keyEvents = it }
+                SectionCard(context.getString(R.string.field_memory_group)) {
+                    FormField(context.getString(R.string.archive_field_relation), state.userRelationType) { state.userRelationType = it }
+                    FormField(context.getString(R.string.archive_field_interaction), state.userInteractionModel) { state.userInteractionModel = it }
+                    FormField(context.getString(R.string.archive_field_bottomline), state.userRelationBottomLine) { state.userRelationBottomLine = it }
+                    FormField(context.getString(R.string.field_key_events), state.keyEvents) { state.keyEvents = it }
                 }
 
-                SectionCard("对话设置（Tavern 兼容字段）") {
-                    FormField("开场白 first_mes", state.firstMes) { state.firstMes = it }
-                    FormField("示例对话 mes_example", state.mesExample) { state.mesExample = it }
-                    FormField("系统提示词 system_prompt", state.systemPrompt) { state.systemPrompt = it }
-                    FormField("历史后指令 post_history", state.postHistory) { state.postHistory = it }
-                    FormField("描述 description", state.description) { state.description = it }
+                SectionCard(context.getString(R.string.field_tavern_group)) {
+                    FormField(context.getString(R.string.field_first_mes), state.firstMes) { state.firstMes = it }
+                    FormField(context.getString(R.string.field_mes_example), state.mesExample) { state.mesExample = it }
+                    FormField(context.getString(R.string.field_system_prompt), state.systemPrompt) { state.systemPrompt = it }
+                    FormField(context.getString(R.string.field_post_history), state.postHistory) { state.postHistory = it }
+                    FormField(context.getString(R.string.field_description), state.description) { state.description = it }
                 }
 
                 Spacer(Modifier.height(24.dp))

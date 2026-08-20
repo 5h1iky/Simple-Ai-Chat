@@ -1,0 +1,451 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SAChat</string>
+
+    <!-- Settings -->
+    <string name="settings_title">API Settings</string>
+    <string name="label_api_url">API URL</string>
+    <string name="hint_api_url">e.g. https://api.openai.com/v1</string>
+    <string name="label_api_key">API Key</string>
+    <string name="hint_api_key">sk-xxxxxxxxxxxxxxxx</string>
+    <string name="label_model">Model name</string>
+    <string name="hint_model">e.g. gpt-3.5-turbo</string>
+    <string name="btn_save">Save &amp; Start Chatting</string>
+    <string name="label_system_prompt">System Prompt</string>
+    <string name="hint_system_prompt">e.g. You are a helpful assistant. Today: {{cur_date}}</string>
+    <string name="hint_system_prompt_vars">Available variables: {{cur_date}} {{cur_time}} {{cur_datetime}}</string>
+
+    <!-- Default system prompt (used on first launch or when not customized) -->
+    <string name="default_system_prompt"><![CDATA[【Language Rules】
+- Default output language: English
+- Do not reply in other languages unless the user explicitly asks otherwise
+- All thinking, explanations and examples should be in English
+- Even if the input is in another language, understand it first and then answer in English
+- In special contexts such as writing code, or when another language makes the reply clearer for the user, you may use it sparingly]]></string>
+
+    <!-- Chat -->
+    <string name="hint_input">Type a message…</string>
+    <string name="btn_send">Send</string>
+    <string name="settings">Settings</string>
+    <string name="clear_chat">Clear conversation</string>
+    <string name="new_conversation">New conversation</string>
+    <string name="switch_conversation">Switch conversation</string>
+    <string name="delete_conversation">Delete conversation</string>
+    <string name="confirm_delete">Confirm delete</string>
+    <string name="confirm_delete_msg">Delete "%s"? This cannot be undone.</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="retry">Retry last message</string>
+    <string name="edit_system_prompt">Edit system prompt</string>
+    <string name="system_prompt_for_conv">System prompt (current conversation)</string>
+
+    <!-- File upload -->
+    <string name="attach_file">Attach</string>
+    <string name="select_file">Select file</string>
+    <string name="file_text">Text file</string>
+    <string name="file_image">Image</string>
+    <string name="file_unsupported">Unsupported format. Only .txt and image files are supported</string>
+    <string name="file_too_large">File too large (max 20MB)</string>
+    <string name="image_compressing">Compressing image…</string>
+    <string name="toast_file_attached">Attachment added</string>
+    <string name="toast_file_reading">Reading file…</string>
+
+    <!-- Toasts -->
+    <string name="toast_config_saved">Settings saved</string>
+    <string name="toast_please_config">Please complete API settings first</string>
+    <string name="toast_sending">Sending…</string>
+    <string name="toast_conversation_created">New conversation created</string>
+    <string name="toast_conversation_deleted">Conversation deleted</string>
+    <string name="toast_system_prompt_updated">System prompt updated</string>
+
+    <!-- Drawer -->
+    <string name="nav_open">Open navigation drawer</string>
+    <string name="nav_close">Close navigation drawer</string>
+
+    <!-- About -->
+    <string name="about_author_label">Author</string>
+    <string name="about_feedback">Feedback</string>
+    <string name="about_feedback_desc">Issues or suggestions? Contact the author here</string>
+    <string name="disclaimer">Disclaimer</string>
+    <string name="disclaimer_desc">View the bilingual disclaimer</string>
+    <string name="disclaimer_title">Disclaimer</string>
+
+    <!-- Disclaimer content (English) -->
+    <string name="disclaimer_content"><![CDATA[
+<p><b>1. Non-commercial open-source project:</b> This software is an open-source non-profit project maintained by an individual developer. It charges no fees and provides no commercial warranty or technical support of any kind.</p>
+<p><b>2. Dependence on third-party services:</b> The built-in "free model" feature relies on API interfaces provided by third-party providers (such as OpenKilo, OpenCode Zen, etc.). Your conversation content will be transmitted to the third-party servers you select. The developer has no control over how these services process data, so please be cautious when entering personal or private information.</p>
+<p><b>3. Content risk:</b> AI-generated content may contain errors, biases, or inappropriate information and does not represent the developer\'s views. Users are solely responsible for any consequences arising from their use of AI.</p>
+<p><b>4. Service stability:</b> Free APIs are provided by third parties. Availability is not guaranteed 24/7, and the service may be interrupted or rate-limited at any time due to upstream policy changes.</p>
+<p><b>5. Declaration updates:</b> The developer reserves the right to update this disclaimer, and the updated version will be displayed within the application.</p>
+<p><b>Last updated: 2026-07-31</b></p>
+]]></string>
+
+    <!-- Chat UI -->
+    <string name="empty_state">Start a conversation</string>
+    <string name="label_user_name">My nickname</string>
+    <string name="label_ai_name">AI name</string>
+    <string name="label_max_history">Memory history rounds</string>
+    <string name="max_history_note">Applies globally to all conversations and modes (range 5~100). A larger value gives more context but is slower and uses more tokens; free models are recommended not to exceed 40.</string>
+
+    <!-- Free Gateway: providers -->
+    <string name="provider_preset">Provider</string>
+    <string name="provider_custom">Custom (manual input)</string>
+    <string name="provider_open_kilo">OpenKilo free router</string>
+    <string name="provider_open_code_zen">OpenCode Zen free models</string>
+    <string name="provider_free_hint">Free services need no API key; provided by third parties with limited stability</string>
+    <string name="select_model">Select model</string>
+    <string name="model_auto">Auto route</string>
+    <string name="model_nemotron_ultra">NVIDIA Nemotron 3 Ultra 550b (top performance)</string>
+    <string name="model_stepfun">StepFun 3.7 Flash 196b (fast)</string>
+    <string name="model_ling">inclusionAI Ling 3.0 124b (fast)</string>
+    <string name="model_nemotron_super">NVIDIA Nemotron 3 Super 120b</string>
+    <string name="model_laguna">Poolside Laguna S 2.1 118b (coding)</string>
+    <string name="model_zen_mimo">Mimo V2.5 310b multimodal</string>
+    <string name="model_zen_ling">Ling 3.0 Flash 124b</string>
+    <string name="model_zen_deepseek">DeepSeek V4 Flash 284b</string>
+    <string name="model_zen_nemotron">Nemotron 3 Ultra 550b multimodal</string>
+    <string name="model_zen_north">North Mini Code 30b</string>
+    <string name="model_zen_laguna">Laguna S 2.1 118b</string>
+    <string name="kilo_model_tip_title">Free model notice</string>
+    <string name="kilo_model_tip_message">Available free models may change with provider policy, and specific model options may stop working. Auto routing is recommended to stay available.</string>
+    <string name="got_it">Got it</string>
+
+    <!-- Adventure DM/GM prompt (sent to AI, follows UI language) -->
+    <string name="adventure_dm_prompt"><![CDATA[You are an experienced story master (DM/GM). You will host a text adventure (tabletop roleplay):
+1. Based on the world setting and character cards, advance the plot, describe scenes, and play all NPCs and characters.
+2. Drive interaction through speech, actions, and plot; keep immersion in every reply and never break character.
+3. The player can input in three ways: [Speech], [Action] and [Plot]:
+   - [Speech]: say something (characters will respond)
+   - [Action]: perform an action (describe the outcome)
+   - [Plot]: steer the story (control the pacing)
+4. Offer choices (A/B/C) at important story beats for the player to decide.
+5. Keep the world consistent and make good use of the world book settings.]]></string>
+
+    <!-- Chat: empty state / adventure chips / drawer -->
+    <string name="chat_empty_title">Start a conversation</string>
+    <string name="chat_empty_subtitle">Chat with characters, world books or adventures</string>
+    <string name="adventure_chip_language">[Speech]</string>
+    <string name="adventure_chip_action">[Action]</string>
+    <string name="adventure_chip_plot">[Plot]</string>
+    <string name="drawer_new_chat">New chat</string>
+    <string name="drawer_history_title">History</string>
+    <string name="drawer_history_hint">Tap to switch · Long-press to edit</string>
+    <string name="drawer_group_characters">Characters</string>
+    <string name="drawer_group_world">World Info</string>
+    <string name="drawer_group_records">Records</string>
+    <string name="drawer_group_other">More</string>
+    <string name="nav_roleplay">Roleplay</string>
+    <string name="nav_adventure">Adventure</string>
+    <string name="nav_import">Import</string>
+    <string name="nav_manage">Manage</string>
+    <string name="nav_create">Create</string>
+    <string name="nav_world_select">Select</string>
+    <string name="nav_bond">Bond archive</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_about">About</string>
+    <string name="nav_crash_test">Test crash report</string>
+
+    <!-- Chat: top bar menu -->
+    <string name="menu_web_search_on">Enable web search</string>
+    <string name="menu_web_search_off">Disable web search</string>
+    <string name="menu_thinking_level">Deep thinking: %s</string>
+    <string name="menu_thinking_off">Deep thinking: off</string>
+    <string name="menu_retry">Retry last message</string>
+    <string name="menu_archive_memory">Archive memory to character card</string>
+    <string name="menu_import_chat_log">Import tavern chat log</string>
+    <string name="menu_search">Search</string>
+    <string name="menu_edit_system_prompt">Edit system prompt</string>
+
+    <!-- Chat: long-press conversation actions -->
+    <string name="conv_actions_delete">Delete conversation</string>
+    <string name="conv_actions_clear">Clear conversation</string>
+    <string name="conv_actions_rename">Rename conversation</string>
+    <string name="conv_actions_world">World Info settings</string>
+    <string name="confirm_clear_title">Confirm clear</string>
+    <string name="confirm_clear_msg">Clear all messages in "%s"?</string>
+    <string name="rename_title">Rename conversation</string>
+    <string name="rename_label">New title</string>
+    <string name="btn_ok">OK</string>
+    <string name="btn_save_short">Save</string>
+
+    <!-- Chat: world info multi-select -->
+    <string name="world_select_title">World Info settings</string>
+    <string name="world_select_none">No world book enabled</string>
+    <string name="world_select_count">%d enabled</string>
+    <string name="world_select_empty_hint">No world books yet. Add one via the drawer → World Info → Create/Import</string>
+    <string name="world_disabled_toast">World book disabled</string>
+    <string name="world_enabled_count_toast">World book enabled (%d)</string>
+    <string name="world_enabled_toast">World book enabled</string>
+
+    <!-- Chat: memory archiving -->
+    <string name="archive_confirm_title">Confirm memory archiving</string>
+    <string name="archive_confirm_write">Write to card</string>
+    <string name="archive_field_title">Session title</string>
+    <string name="archive_field_relation">Relationship type with user</string>
+    <string name="archive_field_interaction">Interaction style with user</string>
+    <string name="archive_field_bottomline">Relationship bottom line</string>
+    <string name="archive_field_events">Key events (appended to existing)</string>
+    <string name="archiving_message">Analyzing the conversation to extract character memory…</string>
+    <string name="archive_wait_streaming">Wait for the reply to finish before archiving</string>
+    <string name="archive_already_done">Memory already archived for this session</string>
+    <string name="archive_need_character">Bind a character card first to archive memory</string>
+    <string name="archive_card_missing">Character card not found</string>
+    <string name="archive_no_messages">No conversation content to analyze</string>
+    <string name="archive_analyze_failed">Memory analysis failed: %s</string>
+    <string name="archive_card_load_failed">Failed to load character card, cannot archive</string>
+    <string name="archive_done_toast">Memory archived to character card; session locked</string>
+    <string name="archive_write_failed">Failed to write back to character card</string>
+
+    <!-- Chat: thinking level / search / import -->
+    <string name="thinking_level_title">Choose thinking level</string>
+    <string name="thinking_enabled_toast">Deep thinking enabled (%s)</string>
+    <string name="search_title">Search chat history</string>
+    <string name="search_hint">Enter a keyword</string>
+    <string name="search_no_messages">No messages to search</string>
+    <string name="search_no_result">No matches found</string>
+    <string name="search_result_title">%d matches found</string>
+    <string name="import_card_title">Import character card</string>
+    <string name="import_card_name">Name: %s</string>
+    <string name="import_card_desc">Description: %s</string>
+    <string name="import_card_import_chat">Import &amp; start chatting</string>
+    <string name="import_card_import_only">Import only</string>
+    <string name="import_saved_toast">Character "%s" imported</string>
+    <string name="import_save_failed">Save failed</string>
+    <string name="world_import_warn_title">Import done (some entries skipped)</string>
+
+    <!-- Chat: model info / message area / attachments -->
+    <string name="model_fetching">Model: fetching…</string>
+    <string name="model_fetch_failed">Model: failed to fetch</string>
+    <string name="model_info_format">Model: %s</string>
+    <string name="msg_thinking_label">Thinking</string>
+    <string name="msg_system_prompt_fold">System prompt (merged settings)</string>
+    <string name="msg_thinking_dots">Thinking…</string>
+    <string name="msg_card_marker">Character card (tap to view)</string>
+    <string name="msg_avatar_desc">Avatar</string>
+    <string name="attach_txt_hint">[TXT] %1$s | %2$s</string>
+    <string name="attach_img_hint">[IMG] %1$s | %2$s</string>
+    <string name="no_retry_message">No message to retry</string>
+    <string name="chat_log_imported">Imported %d messages</string>
+    <string name="chat_log_import_failed">Import failed: %s</string>
+    <string name="file_read_failed">Failed to read file: %s</string>
+    <string name="card_format_invalid">Invalid character card format: %s</string>
+    <string name="world_import_failed">Import failed: %s</string>
+    <string name="world_import_ok">World book "%s" imported%s</string>
+    <string name="toast_image_invalid">Invalid image</string>
+    <string name="menu_desc">Menu</string>
+    <string name="archive_hint_title">Session title</string>
+    <string name="archive_hint_relation">e.g. sworn friends, love-hate rivals</string>
+    <string name="archive_hint_interaction">How the character interacts with you</string>
+    <string name="archive_hint_bottomline">The character\'s bottom line</string>
+    <string name="archive_hint_events">List items starting with -, one per line</string>
+    <string name="role_user_label">User</string>
+    <string name="role_ai_label">AI</string>
+    <string name="chat_log_import_title">Imported conversation</string>
+    <string name="world_import_warn_suffix"> (%d warnings)</string>
+    <string name="adventure_title_prefix">Adventure: %s</string>
+    <string name="adventure_title_default">Text adventure</string>
+
+    <!-- Settings page -->
+    <string name="settings_page_title">Settings</string>
+    <string name="settings_page_subtitle">Personalize your SAChat</string>
+    <string name="settings_group_api">API configuration</string>
+    <string name="settings_group_font">Font size</string>
+    <string name="settings_group_prompt">Prompt management</string>
+    <string name="settings_group_search">Web search</string>
+    <string name="settings_group_bg">Background image</string>
+    <string name="settings_group_nickname">Chat nickname</string>
+    <string name="settings_add_api">Add API</string>
+    <string name="settings_label_hint">Label (e.g. Main GPT)</string>
+    <string name="settings_label_empty">Label cannot be empty</string>
+    <string name="settings_edit_api">Edit API</string>
+    <string name="settings_add_api_title">Add API</string>
+    <string name="settings_in_use">In use</string>
+    <string name="settings_not_configured">Not configured</string>
+    <string name="settings_delete">Delete</string>
+    <string name="settings_font_size_hint">Size (sp)</string>
+    <string name="settings_font_preview">Preview</string>
+    <string name="settings_system_prompt_label">Default system prompt</string>
+    <string name="settings_system_prompt_note">Only applies to default chat mode; character mode follows the character card prompt</string>
+    <string name="settings_world_budget_label">World Info token budget (aligned with tavern Context %%/Budget)</string>
+    <string name="settings_world_budget_note">Matched entries are injected within this budget; the rest are skipped (constant entries first)</string>
+    <string name="settings_search_url_label">Search API URL</string>
+    <string name="settings_search_note">After configuring, you can enable web search from the top-right menu</string>
+    <string name="settings_bg_color">Auto</string>
+    <string name="settings_bg_image">Image fill</string>
+    <string name="settings_pick_png">Pick PNG image</string>
+    <string name="settings_no_image">No image selected</string>
+    <string name="settings_bg_fit">Fit ratio</string>
+    <string name="settings_bg_fill">Original ratio tile</string>
+    <string name="settings_pick_user_avatar">Pick my avatar</string>
+    <string name="settings_pick_ai_avatar">Pick AI avatar</string>
+    <string name="settings_avatar_picked">%savatar selected</string>
+    <string name="settings_save">Save settings</string>
+    <string name="settings_saved_toast">Settings saved</string>
+    <string name="settings_image_invalid">Invalid image</string>
+    <string name="settings_bg_picked">Background image selected</string>
+    <string name="settings_image_failed">Failed to load image</string>
+    <string name="settings_avatar_failed">Failed to load avatar</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_tip">Changing the language takes effect immediately and returns to the chat page</string>
+    <string name="settings_language_system">Follow system</string>
+
+    <!-- About -->
+    <string name="about_version_slogan">%s · Lightweight AI chat</string>
+    <string name="about_author_name">Author · 明日awo</string>
+    <string name="about_author_desc">99%% naturally AI-made</string>
+    <string name="about_license">License · MIT</string>
+    <string name="about_license_desc">Free to use, modify and distribute</string>
+    <string name="about_copyright">Copyright © 2026 5h1iky</string>
+
+    <!-- Character list -->
+    <string name="char_list_title_manage">Character management</string>
+    <string name="char_list_title_select">Select character</string>
+    <string name="char_list_import">Import</string>
+    <string name="char_list_new">New character card</string>
+    <string name="char_list_empty">No character cards yet. Tap + in the top-right to create or import</string>
+    <string name="char_list_edit">Edit character card</string>
+    <string name="char_list_export">Export character card</string>
+    <string name="char_list_exported">Character card exported</string>
+    <string name="char_list_export_failed">Export failed: %s</string>
+    <string name="char_list_export_unreadable">Export failed: cannot read character card</string>
+    <string name="char_list_deleted">Deleted</string>
+    <string name="char_list_invalid">Invalid character card format</string>
+    <string name="char_list_imported">Character "%s" imported</string>
+    <string name="char_list_import_failed">Import failed: %s</string>
+    <string name="back">Back</string>
+
+    <!-- World info list -->
+    <string name="world_list_title_manage">World Info management</string>
+    <string name="world_list_title_select">Select world book</string>
+    <string name="world_list_new">New world book</string>
+    <string name="world_list_empty">No world books yet. Tap + in the top-right to create or import</string>
+    <string name="world_list_longpress_hint">Long-press a conversation to enable</string>
+    <string name="world_list_entries">%d entries</string>
+    <string name="world_list_no_conv">No conversation uses this</string>
+    <string name="world_list_used_by">Used by: %s</string>
+    <string name="world_list_edit">Edit world book</string>
+    <string name="world_list_export">Export world book</string>
+    <string name="world_list_exported">World book exported</string>
+    <string name="world_list_export_failed">Export failed: %s</string>
+    <string name="world_list_export_unreadable">Export failed: cannot read world book</string>
+
+    <!-- Character editor -->
+    <string name="char_edit_avatar_failed">Failed to load avatar</string>
+    <string name="char_edit_name_empty">Character name cannot be empty</string>
+    <string name="char_edit_saved">Character "%s" saved</string>
+    <string name="char_edit_unnamed">Unnamed character</string>
+    <string name="char_edit_preview">Preview</string>
+    <string name="char_edit_title">Edit character card</string>
+    <string name="char_edit_mode_edit">Edit</string>
+    <string name="char_edit_mode_preview">Preview</string>
+    <string name="char_edit_change_avatar">Change avatar</string>
+    <string name="char_edit_pick_avatar">Pick avatar</string>
+    <string name="field_basic">Basic info</string>
+    <string name="field_name">Name</string>
+    <string name="field_age">Age</string>
+    <string name="field_gender">Gender</string>
+    <string name="field_race">Race</string>
+    <string name="field_birthplace">Birthplace</string>
+    <string name="field_occupation">Occupation</string>
+    <string name="field_social_class">Social class</string>
+    <string name="field_identity_tags">Identity tags</string>
+    <string name="field_tags_hint">Type a tag and press Enter to add</string>
+    <string name="field_appearance">Appearance &amp; vibe</string>
+    <string name="field_height_build">Height &amp; build</string>
+    <string name="field_iconic_features">Iconic features</string>
+    <string name="field_clothing_style">Clothing style</string>
+    <string name="field_overall_vibe">Overall vibe</string>
+    <string name="field_personality">Personality</string>
+    <string name="field_ext_personality">Outer personality</string>
+    <string name="field_int_personality">Inner personality</string>
+    <string name="field_core_desire">Core desire</string>
+    <string name="field_fear_weakness">Fears &amp; weaknesses</string>
+    <string name="field_moral_values">Moral values</string>
+    <string name="field_quirk">Quirks</string>
+    <string name="field_skills_history">Skills &amp; history</string>
+    <string name="field_skills">Skills</string>
+    <string name="field_background">Backstory</string>
+    <string name="field_relationships">Relationships</string>
+    <string name="field_speaking_style">Speaking style</string>
+    <string name="field_typical_reactions">Typical reactions</string>
+    <string name="field_memory_group">Character memory (archiving target)</string>
+    <string name="field_key_events">Key events</string>
+    <string name="field_tavern_group">Chat settings (Tavern-compatible)</string>
+    <string name="field_first_mes">Greeting first_mes</string>
+    <string name="field_mes_example">Example messages mes_example</string>
+    <string name="field_system_prompt">System prompt system_prompt</string>
+    <string name="field_post_history">Post-history instructions post_history</string>
+    <string name="field_description">Description description</string>
+
+    <!-- World info editor -->
+    <string name="pos_before_char_defs">Before character defs</string>
+    <string name="pos_after_system_prompt">After character defs</string>
+    <string name="pos_before_examples">Before example messages</string>
+    <string name="pos_after_examples">After example messages</string>
+    <string name="pos_at_depth">@ Depth injection</string>
+    <string name="world_edit_name_empty">Name cannot be empty</string>
+    <string name="world_edit_saved">World book "%s" saved</string>
+    <string name="world_edit_title">Edit world book</string>
+    <string name="world_edit_basic">Basic info</string>
+    <string name="world_edit_name">Name</string>
+    <string name="world_edit_desc">Description</string>
+    <string name="world_edit_tips_title">Tips</string>
+    <string name="world_edit_tips_preview">Behavior aligned with SillyTavern</string>
+    <string name="world_edit_tips_content">Keyword triggers (regex /.../, whole-word matching, secondary key filters, trigger probability, constant entries, @ depth injection). The token budget can be adjusted in Settings.</string>
+    <string name="world_edit_entries">Entries (%d)</string>
+    <string name="world_edit_entry_hint">Tap to edit, long-press to delete</string>
+    <string name="world_edit_add_entry">Add entry</string>
+    <string name="world_edit_add">Add</string>
+    <string name="world_edit_unnamed_entry">Unnamed entry</string>
+    <string name="world_edit_entry_meta">%1$s | Priority %2$d</string>
+    <string name="world_edit_entry_title">Edit entry</string>
+    <string name="world_edit_keywords">Keywords (comma-separated, /.../ means regex)</string>
+    <string name="world_edit_secondary_keys">Secondary keys (optional filter)</string>
+    <string name="world_edit_content">Content</string>
+    <string name="world_edit_position">Injection position</string>
+    <string name="world_edit_priority">Priority (Order)</string>
+    <string name="world_edit_probability">Probability (%)</string>
+    <string name="world_edit_inject_depth">Injection depth</string>
+    <string name="world_edit_scan_depth">Scan depth</string>
+    <string name="world_edit_role_filter">Role filter (user/assistant)</string>
+    <string name="world_edit_group">Inclusion group</string>
+    <string name="world_edit_const">Constant</string>
+    <string name="world_edit_regex">Regex</string>
+    <string name="world_edit_case">Case</string>
+    <string name="world_edit_whole_words">Whole words</string>
+    <string name="world_edit_selective">Secondary filter</string>
+    <string name="world_edit_use_prob">Use probability</string>
+    <string name="world_edit_pick_position">Choose injection position</string>
+
+    <!-- Bond archive -->
+    <string name="bond_title">Bond archive</string>
+    <string name="bond_empty">No bond records yet.\nChat with a character and use "Archive memory"; relationships and events will be kept here.</string>
+    <string name="bond_sessions_count">%d archived sessions</string>
+    <string name="bond_overview">Relationship overview</string>
+    <string name="bond_relation_type">Relationship type</string>
+    <string name="bond_interaction_model">Interaction style</string>
+    <string name="bond_bottom_line">Bottom line</string>
+    <string name="bond_timeline">Key events timeline</string>
+    <string name="bond_timeline_empty">No records yet; key events will appear here after archiving</string>
+    <string name="bond_footprints">Session footprints (%d)</string>
+    <string name="bond_msg_count">%1$s · %2$d messages</string>
+
+    <!-- Text adventure -->
+    <string name="adventure_need_role">Select at least one character card</string>
+    <string name="adventure_title">Text adventure</string>
+    <string name="adventure_start">Start adventure</string>
+    <string name="adventure_world_group">World book (single, optional)</string>
+    <string name="adventure_no_world">No world books</string>
+    <string name="adventure_role_group">Character cards (multi-select, at least 1)</string>
+    <string name="adventure_no_role">No character cards yet. Create or import first</string>
+    <string name="adventure_opening_group">Opening plot</string>
+    <string name="adventure_opening_hint">Enter the story opening (optional)</string>
+    <string name="adventure_input_hint">In adventure you can input via [Speech] [Action] [Plot]</string>
+    <string name="adventure_selected_roles">%d characters selected</string>
+
+    <!-- Splash -->
+    <string name="splash_crash_title">Issue on last launch</string>
+    <string name="splash_crash_msg">The app ran into an issue last time. You can copy the details and send them to me so I can fix it.</string>
+    <string name="splash_crash_copy">Copy &amp; report</string>
+    <string name="splash_crash_ignore">Ignore</string>
+</resources>
