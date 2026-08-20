@@ -236,6 +236,31 @@
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:layout_marginTop="4dp" />
 
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layoutWorldBudget"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:hint="世界书 token 预算（酒馆 Context %/Budget 对齐）">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etWorldBudget"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:text="1500" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="世界书命中条目按此预算注入上下文，超出部分不注入（常驻条目优先）"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:layout_marginTop="4dp" />
+
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
