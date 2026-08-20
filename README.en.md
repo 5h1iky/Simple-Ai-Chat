@@ -43,11 +43,11 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 
 ## Screenshots
 
-<img width="360" height="800" alt="e29229d5579b3fc7dd3ab3c35d6669bc" src="https://github.com/user-attachments/assets/5ea5a096-b61b-4be2-b377-599c4cbf7107" />  <img width="360" height="800" alt="49ef086f01ff331da15404006a2be6b8" src="https://github.com/user-attachments/assets/509a3d95-ad5c-47af-a119-2549f299d29d" />
+<img width="360" alt="SAChat screenshot 1" src="ui/screenshots/0a8a76ef8b129c03c120b380bc2beaac.jpg" />  <img width="360" alt="SAChat screenshot 2" src="ui/screenshots/35e3e42263e5fd4ecf8089cdcfc0dd81.jpg" />
 
-<img width="360" height="800" alt="ef80ac36d82c6aeb8fab453571bff63b" src="https://github.com/user-attachments/assets/5e60ac4e-b7df-481f-8aea-16cad060ddcb" />
+<img width="360" alt="SAChat screenshot 3" src="ui/screenshots/ae256ae38db6a41357f973cbaa880f68.jpg" />
 
-<img width="360" height="800" alt="7bf15fcc74b4c6ad86d2ac1e97c628fd" src="https://github.com/user-attachments/assets/67f2bec2-4ec6-4107-b65b-7a0c22ce3b14" />
+<img width="360" alt="SAChat screenshot 4" src="ui/screenshots/b631489cf1a2f664695ea039072b1fa4.jpg" />
 
 > Follows the system's light/dark mode
 
