@@ -9,6 +9,10 @@
 
 SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，内置了多个免费模型，无需密钥即可使用。
 
+**v2.1.2**：附件上传改为标准化实现（文件不再拼进用户消息正文，气泡内显示文件卡片/图片缩略图），免费模型列表改为从提供商动态获取。
+
+> **v2.1.2** — Attachment handling reworked: files are sent as proper content blocks instead of being pasted into the user message, and are now rendered as file cards / image thumbnails in the chat bubble. Free-model lists are fetched dynamically from each provider.
+
 **v2.1.1**：界面已全面迁移至 Jetpack Compose（Material 3 现代视觉：圆角卡片、渐变主色、统一图标体系），对话与世界书管理大幅增强（长按对话管理、多本世界书同开、角色卡/世界书导出）。
 
 > **v2.1.1** — Added **UI language switching (中文 / English)** in Settings, follows the system language by default.
@@ -20,7 +24,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 | 分类 | 说明 |
 | --- | --- |
 | 自定义API | 同时保存多条 API 配置 |
-| 免费模型预设 | 内置 OpenKilo、OpenCode Zen |
+| 免费模型预设 | 内置 OpenKilo、OpenCode Zen；**模型列表从提供商动态获取**，网络不可用时回落内置列表 |
 | 角色扮演 | 创建自己的角色：头像、性格、场景、开场白、示例对话、系统提示词 |
 | 结构化角色卡 | 27 个结构化字段（基础信息/身份标签/外貌气质/性格特征/技能与经历/角色记忆），分组表单编辑 + Markdown 效果预览双模式，角色卡片列表选择 |
 | 记忆封存 | 对话结束后让 AI 分析本次经历，确认后把关系变化、关键事件**写回角色卡**，会话随之锁定归档（酒馆官方都没有的能力） |
@@ -35,7 +39,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 | Tavern Card | 支持导入 TavernV2V3 角色卡（PNG 格式） |
 | 多对话管理 | 新建 / 切换 / 删除对话，清空重来，失败重试，搜索跳转（历史对话列表超过 5 条自动滚动） |
 | 聊天内 UI | 顶部绑定信息条（角色/世界书一键切换，多本世界书并列提示）、「系统提示词（已融合设定）」可折叠块、思考过程折叠块、`[[CARD:角色id]]` 标记渲染为聊天内角色卡卡片 |
-| 附件上传 | 支持上传文本文件与图片（自动压缩） |
+| 附件上传 | 文本文件与图片（自动压缩）；**文件作为独立内容块发送**（不再拼进用户消息正文），气泡内显示文件卡片 / 图片缩略图，大文件走全屏查看器并标注 token 估算 |
 | Markdown对话 | 对话内容渲染 Markdown |
 | 其他设置 | 字号调节、背景图片/颜色（等比裁剪/原比例平铺）、AI 昵称头像、系统提示词变量 `{{cur_date}}` 等、世界书 token 预算 |
 | 全新 Compose UI | 全页面 Jetpack Compose + Material 3：圆角卡片体系、渐变主色、统一 Material Icons（零 emoji）、启动页提速（约 6.6s → 3.3s 且视觉不变） |
@@ -60,7 +64,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 前往 [Releases 页面](https://github.com/5h1iky/Simple-Ai-Chat/releases) 下载最新版 APK 安装包。
 
-**当前版本：v2.1.1**
+**当前版本：v2.1.2**
 
 > 需要 Android 7.0（API 24）及以上设备。
 

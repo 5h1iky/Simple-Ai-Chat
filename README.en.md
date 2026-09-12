@@ -6,6 +6,10 @@
 
 SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-compatible endpoint, and ships with several free model providers, so you can use it without a key.
 
+**v2.1.2**: Attachment handling reworked — files are sent as proper content blocks instead of being pasted into the user message, and are rendered as file cards / image thumbnails in the chat bubble. Free-model lists are now fetched dynamically from each provider.
+
+> **v2.1.2** — Large files are never rendered inline; a full-screen viewer shows the content on demand, with a token estimate on the card.
+
 **v2.1.1**: The UI has been fully migrated to Jetpack Compose (modern Material 3 visuals: rounded cards, gradient primary color, unified icon set), with major conversation & world-book enhancements (long-press conversation management, multiple world books at once, character card / world book export).
 
 > **v2.1.1** — Added **UI language switching (Chinese / English)** in Settings, follows the system language by default.
@@ -17,7 +21,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 | Category | Description |
 | --- | --- |
 | Custom API | Save multiple API configurations at once |
-| Free model presets | Built-in OpenKilo, OpenCode Zen |
+| Free model presets | Built-in OpenKilo and OpenCode Zen; the **model list is fetched dynamically from the provider**, falling back to a built-in list when offline |
 | Roleplay | Create your own characters: avatar, personality, scenario, first message, example dialogues and system prompts |
 | Structured character cards | 27 structured fields (basic info / identity tags / appearance / personality / skills & history / relationship memory), grouped-form editing with a Markdown preview mode, and a card-style character picker |
 | Memory archiving | After a chat, the AI analyzes the session; on confirmation, relationship changes and key events are **written back into the character card**, and the session is locked & archived (a capability even SillyTavern doesn't have officially) |
@@ -32,7 +36,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 | Tavern Card | Import Tavern V2/V3 character cards (PNG format) |
 | Multi-conversation management | Create / switch / delete conversations, clear and restart, retry on failure, search & jump (history list auto-scrolls past 5 entries) |
 | Chat UI | Binding bar (one-tap character/world-book switching, multiple world books shown side by side), collapsible "system prompt (merged settings)" block, collapsible thinking block, and `[[CARD:characterId]]` markers rendered as in-chat character card chips |
-| Attachments | Attach text files and images (auto-compressed) |
+| Attachments | Text files and images (auto-compressed); files are **sent as proper content blocks** (no longer pasted into the user message) and shown as file cards / image thumbnails, with a full-screen viewer and token estimate for large files |
 | Markdown chat | Renders Markdown in conversation content |
 | Other settings | Font size, background image/color (cover-crop or tile at original ratio), AI nickname & avatar, system prompt variables like `{{cur_date}}`, World Info token budget |
 | All-new Compose UI | Every screen in Jetpack Compose + Material 3: rounded card system, gradient primary, unified Material Icons (zero emoji), faster splash (~6.6s → 3.3s with identical visuals) |
@@ -57,7 +61,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 
 Get the latest APK from the [Releases page](https://github.com/5h1iky/Simple-Ai-Chat/releases).
 
-**Current version: v2.1.1**
+**Current version: v2.1.2**
 
 > Requires Android 7.0 (API 24) or above.
 
