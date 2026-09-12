@@ -99,15 +99,24 @@ object CharacterCompiler {
         val data = card.data
         val fields = data.getCharacterFields()
 
+        // 旧字段（description/personality/scenario）全项目仅此处进入提示词。
+        // 注意：结构化字段非空时**也必须**追加 —— 否则一旦封存记忆写入 sachat_fields，
+        // isEmpty() 将永久为 false，旧字段被静默丢弃，AI 会当场"忘记"角色设定。
+        val legacyParts = mutableListOf<String>()
+        if (data.description.isNotBlank()) legacyParts.add("[角色设定]\n${data.description}")
+        if (data.personality.isNotBlank()) legacyParts.add("[性格]\n${data.personality}")
+        if (data.scenario.isNotBlank()) legacyParts.add("[场景]\n${data.scenario}")
+
         val definition = if (!fields.isEmpty()) {
-            compileMarkdown(data.name, fields)
+            val structured = compileMarkdown(data.name, fields)
+            // 去重：旧字段内容已包含在结构化渲染里时不再追加（避免提示词翻倍）
+            val extra = legacyParts.filterNot { part ->
+                val body = part.substringAfter('\n').trim()
+                body.isNotEmpty() && structured.contains(body)
+            }
+            (listOf(structured) + extra).filter { it.isNotBlank() }.joinToString("\n\n")
         } else {
-            // 旧字段兜底（无结构化字段的卡）
-            val parts = mutableListOf<String>()
-            if (data.description.isNotBlank()) parts.add("[角色设定]\n${data.description}")
-            if (data.personality.isNotBlank()) parts.add("[性格]\n${data.personality}")
-            if (data.scenario.isNotBlank()) parts.add("[场景]\n${data.scenario}")
-            parts.joinToString("\n\n")
+            legacyParts.joinToString("\n\n")
         }
 
         val examples = if (data.mes_example.isNotBlank()) {

@@ -43,14 +43,31 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import io.noties.markwon.Markwon
+import kotlinx.coroutines.launch
 import www.cetool.com.R
+import www.cetool.com.manager.WorldInfoEngine
 import www.cetool.com.model.Message
 import www.cetool.com.ui.theme.SAChatTheme
 
@@ -79,6 +96,29 @@ fun parseContentBlocks(content: String): List<ContentBlock> {
     return blocks
 }
 
+/**
+ * 附件展示信息（与气泡正文分离，正文里不含文件全文）。
+ *
+ * @param text 用户实际输入的文字（已剥离旧版遗留的 "[文件: x]" 前缀）
+ */
+data class AttachmentInfo(
+    val type: String,
+    val name: String,
+    val data: String,
+    val text: String
+)
+
+/** 组装附件展示信息（无附件返回 null） */
+@Composable
+private fun rememberAttachmentInfo(message: Message): AttachmentInfo? {
+    val data = message.attachmentData ?: return null
+    val type = message.attachmentType ?: return null
+    val text = if (type == Message.ATTACH_TYPE_TEXT) message.displayText() else message.content
+    val name = message.attachmentName?.takeIf { it.isNotBlank() }
+        ?: stringResource(if (type == Message.ATTACH_TYPE_IMAGE) R.string.file_image else R.string.file_text)
+    return AttachmentInfo(type, name, data, text)
+}
+
 /** 聊天消息列表（Compose 版，替代 MessageAdapter + item_message.xml） */
 @Composable
 fun MessageList(
@@ -98,6 +138,8 @@ fun MessageList(
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    // 附件全文查看器：只有用户主动打开时才渲染全文（大文件不拖慢聊天列表）
+    var viewingAttachment by remember { mutableStateOf<AttachmentInfo?>(null) }
 
     // 新消息自动滚动到底部
     LaunchedEffect(messages.size) {
@@ -145,10 +187,18 @@ fun MessageList(
                     userAvatar = userAvatar,
                     aiName = aiName,
                     fontSize = fontSize,
-                    onCardClick = onCardClick
+                    onCardClick = onCardClick,
+                    onViewAttachment = { viewingAttachment = it }
                 )
             }
         }
+    }
+
+    viewingAttachment?.let { attachment ->
+        AttachmentViewerDialog(
+            attachment = attachment,
+            onDismiss = { viewingAttachment = null }
+        )
     }
 }
 
@@ -231,7 +281,8 @@ private fun ChatMessageRow(
     userAvatar: String?,
     aiName: String,
     fontSize: Int,
-    onCardClick: (String) -> Unit
+    onCardClick: (String) -> Unit,
+    onViewAttachment: (AttachmentInfo) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -256,7 +307,13 @@ private fun ChatMessageRow(
                     modifier = Modifier.padding(start = 2.dp, bottom = 2.dp)
                 )
             }
-            ChatBubble(message = message, isUser = isUser, fontSize = fontSize, onCardClick = onCardClick)
+            ChatBubble(
+                message = message,
+                isUser = isUser,
+                fontSize = fontSize,
+                onCardClick = onCardClick,
+                onViewAttachment = onViewAttachment
+            )
         }
         if (isUser) {
             Spacer(Modifier.width(6.dp))
@@ -298,7 +355,8 @@ private fun ChatBubble(
     message: Message,
     isUser: Boolean,
     fontSize: Int,
-    onCardClick: (String) -> Unit
+    onCardClick: (String) -> Unit,
+    onViewAttachment: (AttachmentInfo) -> Unit
 ) {
     val bubbleColor = if (isUser) {
         MaterialTheme.colorScheme.primary
@@ -310,6 +368,14 @@ private fun ChatBubble(
     } else {
         MaterialTheme.colorScheme.onSurface
     }
+
+    // 附件与正文分离：文本附件的正文已剥离旧版 "[文件: x]" 前缀
+    val attachment = rememberAttachmentInfo(message)
+    val bodyText = attachment?.text ?: message.content
+    val hasAttachment = attachment != null
+    val hasBody = bodyText.isNotBlank()
+    // 纯图片（无文字）不渲染气泡，只显示图片
+    val showBubbleBody = hasBody || !hasAttachment
 
     Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
         // 思考内容折叠块
@@ -323,61 +389,72 @@ private fun ChatBubble(
             Spacer(Modifier.height(4.dp))
         }
 
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = if (isUser) 16.dp else 6.dp,
-                topEnd = if (isUser) 6.dp else 16.dp,
-                bottomStart = 16.dp,
-                bottomEnd = 16.dp
-            ),
-            color = bubbleColor
-        ) {
-            if (message.content.isEmpty() && message.reasoningContent.isBlank()) {
-                // 流式中：思考中…
-                Text(
-                    text = stringResource(R.string.msg_thinking_dots),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                )
-            } else {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    parseContentBlocks(message.content).forEach { block ->
-                        when (block) {
-                            is ContentBlock.Text -> {
-                                if (block.text.isNotBlank()) {
-                                    ChatMarkdown(text = block.text, fontSize = fontSize, textColor = textColor)
+        if (hasAttachment) {
+            AttachmentCard(
+                attachment = attachment!!,
+                isUser = isUser,
+                onViewText = onViewAttachment
+            )
+        }
+
+        if (showBubbleBody) {
+            if (hasAttachment) Spacer(Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = if (isUser) 16.dp else 6.dp,
+                    topEnd = if (isUser) 6.dp else 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp
+                ),
+                color = bubbleColor
+            ) {
+                if (!hasBody && message.reasoningContent.isBlank()) {
+                    // 流式中：思考中…
+                    Text(
+                        text = stringResource(R.string.msg_thinking_dots),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textColor,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                } else {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        parseContentBlocks(bodyText).forEach { block ->
+                            when (block) {
+                                is ContentBlock.Text -> {
+                                    if (block.text.isNotBlank()) {
+                                        ChatMarkdown(text = block.text, fontSize = fontSize, textColor = textColor)
+                                    }
                                 }
-                            }
-                            is ContentBlock.CardMarker -> {
-                                // 聊天内角色卡 UI：标记 → 卡片组件
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isUser) {
-                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f)
-                                    } else {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    },
-                                    modifier = Modifier
-                                        .padding(top = 6.dp)
-                                        .clickable { onCardClick(block.cardId) }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                is ContentBlock.CardMarker -> {
+                                    // 聊天内角色卡 UI：标记 → 卡片组件
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (isUser) {
+                                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f)
+                                        } else {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        },
+                                        modifier = Modifier
+                                            .padding(top = 6.dp)
+                                            .clickable { onCardClick(block.cardId) }
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Badge,
-                                            contentDescription = null,
-                                            tint = textColor,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(
-                                            text = stringResource(R.string.msg_card_marker),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = textColor
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Badge,
+                                                contentDescription = null,
+                                                tint = textColor,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                text = stringResource(R.string.msg_card_marker),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = textColor
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -396,6 +473,188 @@ private fun ChatBubble(
             modifier = Modifier.padding(top = 2.dp)
         )
     }
+}
+
+/**
+ * 附件卡片：气泡内的附件展示。
+ *
+ * 设计要点（针对「用户可能上传几万字大文件」）：
+ * - 气泡里**从不渲染文件全文**，避免 Markwon 解析几万字造成卡顿、气泡高度失控。
+ * - 图片 → 直接显示缩略图（`remember` 缓存 bitmap，避免流式重组时反复 decode）。
+ * - 文本 → 只显示卡片（文件名 + 规模 + token 估算）；短文件额外给几行纯文本预览（不用 Markdown，零解析成本）；
+ *   全文通过「查看全文」按钮打开全屏查看器按需渲染。
+ */
+@Composable
+private fun AttachmentCard(
+    attachment: AttachmentInfo,
+    isUser: Boolean,
+    onViewText: (AttachmentInfo) -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+
+    if (attachment.type == Message.ATTACH_TYPE_IMAGE) {
+        // 图片：缓存解码结果，key 为 base64 长度（内容变化时长度必然变化）
+        val bitmap = remember(attachment.data.length) {
+            try {
+                val bytes = Base64.decode(attachment.data, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = attachment.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .width(220.dp)
+                    .heightIn(max = 280.dp)
+                    .clip(shape)
+            )
+        } else {
+            AttachmentTextCard(
+                icon = Icons.Filled.Description,
+                title = attachment.name,
+                subtitle = stringResource(R.string.attach_read_failed),
+                isUser = isUser,
+                footnote = null,
+                onClick = null
+            )
+        }
+    } else {
+        val text = attachment.data
+        val lines = text.count { it == '\n' } + 1
+        val tokens = WorldInfoEngine.estimateTokens(text)
+
+        AttachmentTextCard(
+            icon = Icons.Filled.Description,
+            title = attachment.name,
+            subtitle = stringResource(R.string.attach_file_meta, text.length, lines),
+            footnote = stringResource(R.string.attach_token_estimate, tokens),
+            isUser = isUser,
+            onClick = { onViewText(attachment) }
+        )
+    }
+}
+
+/** 文本附件卡片（不含全文，只给元信息 + 可选短预览） */
+@Composable
+private fun AttachmentTextCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isUser: Boolean,
+    footnote: String?,
+    onClick: (() -> Unit)?
+) {
+    val containerColor = if (isUser) {
+        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        modifier = if (onClick != null) Modifier.clip(RoundedCornerShape(12.dp)).clickable { onClick() } else Modifier
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.75f)
+            )
+            if (footnote != null) {
+                Text(
+                    text = footnote,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contentColor.copy(alpha = 0.6f)
+                )
+            }
+            if (onClick != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.attach_view_full),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = contentColor
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 全屏附件查看器：按需渲染 + 可滚动 + 可复制。
+ * 大文件不会被预先渲染（只有用户主动打开时才组合），因此不会拖慢聊天列表。
+ */
+@Composable
+private fun AttachmentViewerDialog(
+    attachment: AttachmentInfo,
+    onDismiss: () -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var copied by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = attachment.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = attachment.data,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(attachment.data))
+                copied = true
+                scope.launch {
+                    kotlinx.coroutines.delay(1500)
+                    copied = false
+                }
+            }) {
+                Text(stringResource(if (copied) R.string.attach_copied else R.string.attach_copy))
+            }
+        }
+    )
 }
 
 /** Markdown 渲染：复用 Markwon（AndroidView 包装） */

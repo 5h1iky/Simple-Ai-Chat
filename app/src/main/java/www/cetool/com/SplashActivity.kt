@@ -41,7 +41,8 @@ class SplashActivity : ComponentActivity() {
     }
 
     private val brandText = "Simple AI Chat"
-    private val initText = "正在初始化环境..."
+    // 走 strings.xml（v2.1.1 i18n 的唯一漏网项：原为硬编码中文，切英文后启动页仍显示中文）
+    private val initText: String get() = getString(R.string.splash_init_text)
     // 提速参数（原 80/50ms、闪烁 4 次、停留 600/400/1200ms）
     private val typeSpeed = 45L
     private val deleteSpeed = 40L

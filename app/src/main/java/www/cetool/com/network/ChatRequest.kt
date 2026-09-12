@@ -45,5 +45,40 @@ data class MessageItem(
 
             return MessageItem(role, contentArray)
         }
+
+        /**
+         * 文本附件：文件作为**独立内容块**发送，不再拼进用户消息正文。
+         * 采用 OpenAI chat/completions 的 file 内容块（与 image_url 同属多模态机制）。
+         *
+         * @param text     用户实际输入的文字（为空时不发送 text 块）
+         * @param fileName 文件名（作为元数据，不混入正文）
+         * @param fileData 文件全文
+         */
+        fun withFile(
+            role: String,
+            text: String,
+            fileName: String,
+            fileData: String
+        ): MessageItem {
+            val contentArray = JsonArray()
+
+            if (text.isNotBlank()) {
+                val textPart = JsonObject()
+                textPart.addProperty("type", "text")
+                textPart.addProperty("text", text)
+                contentArray.add(textPart)
+            }
+
+            val fileObj = JsonObject()
+            fileObj.addProperty("filename", fileName)
+            fileObj.addProperty("file_data", fileData)
+
+            val filePart = JsonObject()
+            filePart.addProperty("type", "file")
+            filePart.add("file", fileObj)
+            contentArray.add(filePart)
+
+            return MessageItem(role, contentArray)
+        }
     }
 }

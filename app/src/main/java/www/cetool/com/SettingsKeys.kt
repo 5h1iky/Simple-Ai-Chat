@@ -72,6 +72,8 @@ object SettingsKeys {
     const val ZEN_MODEL_NEMOTRON = "nemotron-3-ultra-free"
     const val ZEN_MODEL_NORTH = "north-mini-code-free"
     const val ZEN_MODEL_LAGUNA = "laguna-s-2.1-free"
+    // 实测可用（官方定价表标记 Free）
+    const val ZEN_MODEL_BIG_PICKLE = "big-pickle"
     const val ZEN_MODEL_DEFAULT = ZEN_MODEL_DEEPSEEK
 
     data class ApiEntry(

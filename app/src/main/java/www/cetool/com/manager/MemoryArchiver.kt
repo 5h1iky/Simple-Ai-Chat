@@ -49,7 +49,8 @@ object MemoryArchiver {
         providerMode: String = www.cetool.com.SettingsKeys.PROVIDER_CUSTOM,
         kiloModelOption: String = www.cetool.com.SettingsKeys.KILO_MODEL,
         zenModelOption: String = www.cetool.com.SettingsKeys.ZEN_MODEL_DEFAULT,
-        retry: Boolean = true
+        retry: Boolean = true,
+        appContext: android.content.Context? = null
     ): Result<ArchiveResult> {
         // 1. 整理对话历史
         val chatLines = mutableListOf<String>()
@@ -83,7 +84,7 @@ object MemoryArchiver {
             MessageItem.text("system", SYSTEM_PROMPT),
             MessageItem.text("user", inputText)
         )
-        val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption)
+        val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption, appContext)
         var result = client.requestJson(messages, temperature = 0.0, maxOutputTokens = 8192)
         if (result.isFailure && retry) {
             result = client.requestJson(messages, temperature = 0.0, maxOutputTokens = 8192)

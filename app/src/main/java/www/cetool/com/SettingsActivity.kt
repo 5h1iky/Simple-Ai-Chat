@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -57,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +68,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
+import www.cetool.com.manager.ModelCatalog
 import www.cetool.com.manager.WorldInfoEngine
 import www.cetool.com.model.ApiConfig
 import www.cetool.com.model.Conversation
@@ -160,7 +169,12 @@ class SettingsActivity : ComponentActivity() {
 
         val apiJson = sp.getString(SettingsKeys.KEY_API_CONFIGS, "[]") ?: "[]"
         val listType = object : TypeToken<List<SettingsKeys.ApiEntry>>() {}.type
-        val loaded: List<SettingsKeys.ApiEntry> = gson.fromJson(apiJson, listType)
+        // 兜底：配置损坏（非法 JSON / "null"）时 gson 会返回 null，直接 addAll 会 NPE 导致设置页崩溃
+        val loaded: List<SettingsKeys.ApiEntry> = try {
+            gson.fromJson(apiJson, listType) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
         apiEntries.clear()
         apiEntries.addAll(loaded)
         activeApiIndex = sp.getInt(SettingsKeys.KEY_ACTIVE_API, 0).coerceIn(0, (apiEntries.size - 1).coerceAtLeast(0))
@@ -259,53 +273,52 @@ class SettingsActivity : ComponentActivity() {
             }
         }
         persistProviderState()
+        // 切换服务商后模型列表变了：作废旧结果并刷新兜底值
+        freeModels = emptyList()
+        fallbackModels = ModelCatalog.fallbackModels(providerMode)
     }
 
-    // ─── Free Gateway: OpenKilo / OpenCode Zen 模型选择 ────────────
+    // ─── Free Gateway: OpenKilo / OpenCode Zen 模型选择（动态列表） ────────────
+    // 模型列表由 ModelCatalog 从提供商 /models 动态获取（缓存 24h，失败回落硬编码兜底），
+    // 避免提供商下架/新增模型后应用失效（实测硬编码的 ling-3.0-flash:free 已 404）。
 
-    private val kiloModelOptions = arrayOf(
-        SettingsKeys.KILO_MODEL,
-        SettingsKeys.KILO_MODEL_NEMOTRON_ULTRA,
-        SettingsKeys.KILO_MODEL_STEPFUN,
-        SettingsKeys.KILO_MODEL_LING,
-        SettingsKeys.KILO_MODEL_NEMOTRON_SUPER,
-        SettingsKeys.KILO_MODEL_LAGUNA
-    )
+    private var freeModels by mutableStateOf<List<ModelCatalog.FreeModel>>(emptyList())
+    private var loadingModels by mutableStateOf(false)
+    private var modelLoadFailed by mutableStateOf(false)
 
-    private val kiloModelOptionLabels = arrayOf(
-        R.string.model_auto,
-        R.string.model_nemotron_ultra,
-        R.string.model_stepfun,
-        R.string.model_ling,
-        R.string.model_nemotron_super,
-        R.string.model_laguna
-    )
+    /**
+     * 当前模式的兜底模型列表（纯内存，无 IO）。
+     *
+     * ⚠️ 该值会被 Compose 组合期读取，因此**不得**在此路径上做磁盘/网络操作 ——
+     * 早期实现直接调用 `ModelCatalog.freeModels()` 兜底，会在缓存缺失时于主线程发起网络请求。
+     */
+    private var fallbackModels by mutableStateOf(ModelCatalog.fallbackModels(SettingsKeys.PROVIDER_OPEN_KILO))
 
-    private val zenModelOptions = arrayOf(
-        SettingsKeys.ZEN_MODEL_MIMO,
-        SettingsKeys.ZEN_MODEL_LING,
-        SettingsKeys.ZEN_MODEL_DEEPSEEK,
-        SettingsKeys.ZEN_MODEL_NEMOTRON,
-        SettingsKeys.ZEN_MODEL_NORTH,
-        SettingsKeys.ZEN_MODEL_LAGUNA
-    )
-
-    private val zenModelOptionLabels = arrayOf(
-        R.string.model_zen_mimo,
-        R.string.model_zen_ling,
-        R.string.model_zen_deepseek,
-        R.string.model_zen_nemotron,
-        R.string.model_zen_north,
-        R.string.model_zen_laguna
-    )
-
-    /** 当前模式对应的模型选项列表 */
-    private fun currentModelOptions(): Pair<Array<String>, Array<Int>> {
-        return if (providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) {
-            zenModelOptions to zenModelOptionLabels
-        } else {
-            kiloModelOptions to kiloModelOptionLabels
+    /** 拉取当前模式的模型列表（打开选择器时调用；forceRefresh 用于「刷新」按钮） */
+    private fun loadFreeModels(forceRefresh: Boolean = false) {
+        if (loadingModels) return
+        val mode = providerMode
+        // 同步刷新兜底值（纯内存常量映射，无 IO）
+        fallbackModels = ModelCatalog.fallbackModels(mode)
+        loadingModels = true
+        modelLoadFailed = false
+        lifecycleScope.launch {
+            val models = withContext(Dispatchers.IO) {
+                ModelCatalog.freeModels(applicationContext, mode, forceRefresh)
+            }
+            // 若期间用户切换了服务商，丢弃这次结果
+            if (mode == providerMode) {
+                freeModels = models
+                modelLoadFailed = models.isEmpty()
+            }
+            loadingModels = false
         }
+    }
+
+    /** 当前模式对应的模型选项列表：[0]=id 列表，[1]=显示名列表（组合期安全：无 IO） */
+    private fun currentModelOptions(): Pair<List<String>, List<String>> {
+        val list = freeModels.ifEmpty { fallbackModels }
+        return list.map { it.id } to list.map { it.label }
     }
 
     /** 当前模式选中的模型值 */
@@ -313,11 +326,18 @@ class SettingsActivity : ComponentActivity() {
         return if (providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) zenModelOption else kiloModelOption
     }
 
-    /** 当前模型显示名 */
+    /** 当前模型显示名；模型已下架时明确标注（实测免费档会下架模型） */
     private fun currentModelLabel(): String {
         val (options, labels) = currentModelOptions()
-        val idx = options.indexOf(currentModelValue())
-        return if (idx >= 0) getString(labels[idx]) else currentModelValue()
+        val value = currentModelValue()
+        val idx = options.indexOf(value)
+        val name = if (idx >= 0) labels[idx] else value
+        // 列表已成功拉取（非兜底）且找不到当前模型 → 标注已不可用
+        return if (idx < 0 && freeModels.isNotEmpty()) {
+            getString(R.string.model_unavailable_label, name)
+        } else {
+            name
+        }
     }
 
     private fun onModelSelected(value: String) {
@@ -512,10 +532,17 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun SettingsScreen() {
         val activity = this
+        // 免费模式下预先拉取模型列表（命中 24h 缓存则不产生网络请求），
+        // 这样打开选择器时已是动态列表，而不是先显示兜底再替换
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            if (isFreeMode) loadFreeModels()
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                // 状态栏留白：其余页面由 Scaffold/TopAppBar 自动处理，此页为手写标题栏需显式补
+                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .navigationBarsPadding()
@@ -837,22 +864,26 @@ class SettingsActivity : ComponentActivity() {
         }
         if (showModelTip) {
             AlertDialog(
-                onDismissRequest = { showModelTip = false; showModelOptions = true },
+                onDismissRequest = { showModelTip = false; loadFreeModels(); showModelOptions = true },
                 title = { Text(stringResource(R.string.kilo_model_tip_title)) },
                 text = { Text(stringResource(R.string.kilo_model_tip_message)) },
                 confirmButton = {
-                    TextButton(onClick = { showModelTip = false; showModelOptions = true }) {
+                    TextButton(onClick = { showModelTip = false; loadFreeModels(); showModelOptions = true }) {
                         Text(stringResource(R.string.got_it))
                     }
                 }
             )
         }
         if (showModelOptions) {
+            val (modelIds, modelLabels) = currentModelOptions()
             ModelSelectDialog(
                 title = stringResource(R.string.select_model),
-                options = currentModelOptions().first.toList(),
-                labels = currentModelOptions().second.map { getString(it) },
+                options = modelIds,
+                labels = modelLabels,
                 selected = currentModelValue(),
+                loading = loadingModels,
+                loadFailed = modelLoadFailed,
+                onRefresh = { loadFreeModels(forceRefresh = true) },
                 onSelect = { value ->
                     onModelSelected(value)
                     showModelOptions = false
@@ -922,6 +953,8 @@ class SettingsActivity : ComponentActivity() {
 
     private fun showModelTipOrOptions() {
         val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        // 打开选择器前拉取最新模型列表（命中缓存则不产生网络请求）
+        loadFreeModels()
         // Free Gateway Integration: 每次启动首次点击时弹提示，之后本次启动内不再弹
         if (!sp.getBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, false)) {
             sp.edit().putBoolean(SettingsKeys.KEY_KILO_MODEL_TIP_SHOWN, true).apply()
@@ -1178,6 +1211,9 @@ private fun ModelSelectDialog(
     options: List<String>,
     labels: List<String>,
     selected: String,
+    loading: Boolean,
+    loadFailed: Boolean,
+    onRefresh: () -> Unit,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1186,29 +1222,61 @@ private fun ModelSelectDialog(
         title = { Text(title) },
         text = {
             Column {
-                options.forEachIndexed { index, option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(option) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = option == selected,
-                            onClick = null
-                        )
+                // 状态行：加载中 / 拉取失败（用内置兜底列表）
+                if (loading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = labels.getOrElse(index) { option },
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = stringResource(R.string.model_loading),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                } else if (loadFailed) {
+                    Text(
+                        text = stringResource(R.string.model_load_failed),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+
+                // 模型可能很多（实测 OpenKilo 免费档可达 19 个），需可滚动
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    options.forEachIndexed { index, option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onSelect(option) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = option == selected,
+                                onClick = null
+                            )
+                            Text(
+                                text = labels.getOrElse(index) { option },
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(androidx.compose.ui.platform.LocalContext.current.getString(R.string.cancel)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onRefresh) { Text(stringResource(R.string.model_refresh)) }
         }
     )
 }

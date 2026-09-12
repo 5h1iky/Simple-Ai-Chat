@@ -1,6 +1,7 @@
 package www.cetool.com.network
 
 import com.google.gson.Gson
+import android.content.Context
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,7 +21,9 @@ class AiApiClient(
     // Free Gateway: OpenKilo 模型选项（auto 等，后续扩展）
     private val kiloModelOption: String = SettingsKeys.KILO_MODEL,
     // Free Gateway: OpenCode Zen 模型 ID（纯名称，不加 opencode/ 前缀）
-    private val zenModelOption: String = SettingsKeys.ZEN_MODEL_DEFAULT
+    private val zenModelOption: String = SettingsKeys.ZEN_MODEL_DEFAULT,
+    // Zen 免费档需要 x-session-id（见 companion.sessionId）；自定义模式可传 null
+    private val appContext: Context? = null
 ) {
 
     private val gson = Gson()
@@ -48,8 +51,90 @@ class AiApiClient(
         val url: String,
         val model: String,
         val authHeader: String?,
-        val temperature: Double?
+        val temperature: Double?,
+        /** 需要额外携带的请求头（如 Zen 免费档要求的 x-session-id） */
+        val extraHeaders: Map<String, String> = emptyMap()
     )
+
+    companion object {
+        private const val KEY_SESSION_ID = "zen_session_id"
+
+        @Volatile
+        private var sessionIdCache: String? = null
+
+        /**
+         * Zen 免费档的会话占位头。
+         *
+         * 实测（2026-09）：zen 免费档要求请求携带非空的 `x-session-id`，否则返回
+         * `MissingSessionID: OpenCode's free tier can only be used in OpenCode`。
+         * 服务端只校验该头是否存在（随机 UUID、"12345" 均可通过，空串被拒），
+         * 因此这里生成一次 UUID 并持久化。若提供商将来收紧校验，需要重新评估。
+         */
+        fun sessionId(context: Context): String {
+            sessionIdCache?.let { return it }
+            synchronized(AiApiClient::class.java) {
+                sessionIdCache?.let { return it }
+                val prefs = context.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+                val existing = prefs.getString(KEY_SESSION_ID, null)
+                val id = if (!existing.isNullOrBlank()) {
+                    existing
+                } else {
+                    java.util.UUID.randomUUID().toString().also {
+                        prefs.edit().putString(KEY_SESSION_ID, it).apply()
+                    }
+                }
+                sessionIdCache = id
+                return id
+            }
+        }
+
+        /**
+         * 拉取模型列表（GET /models），供免费网关的模型列表动态化使用。
+         * 两个提供商的响应结构一致（OpenAI 风格 `{data:[{id,...}]}`），字段差异用可选字段兼容。
+         */
+        fun fetchModels(context: Context, providerMode: String): Result<List<ModelItem>> {
+            return try {
+                val url: String
+                val headers: Map<String, String>
+                when (providerMode) {
+                    SettingsKeys.PROVIDER_OPEN_KILO -> {
+                        url = SettingsKeys.KILO_BASE_URL
+                        headers = emptyMap()   // OpenKilo 的 /models 无需认证
+                    }
+                    SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
+                        url = SettingsKeys.ZEN_BASE_URL
+                        headers = mapOf(
+                            "Authorization" to "Bearer ${SettingsKeys.ZEN_PUBLIC_KEY}",
+                            "x-session-id" to sessionId(context)
+                        )
+                    }
+                    else -> return Result.failure(IllegalArgumentException("该模式不支持模型列表"))
+                }
+
+                val requestBuilder = Request.Builder()
+                    .url("${url.trimEnd('/')}/models")
+                    .get()
+                headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
+
+                val listClient = OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build()
+
+                listClient.newCall(requestBuilder.build()).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                    }
+                    val body = response.body?.string()
+                        ?: return Result.failure(Exception("空响应"))
+                    val parsed = Gson().fromJson(body, ModelListResponse::class.java)
+                    Result.success(parsed?.data ?: emptyList())
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
 
     /** 按预设模式解析请求地址 / 模型 / 认证头 / temperature */
     private fun resolveEndpoint(): Endpoint {
@@ -66,12 +151,16 @@ class AiApiClient(
             }
             SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
                 // Free Gateway: OpenCode Zen：固定 Base URL + 强制 Authorization: Bearer public；
-                // 模型 ID 为纯名称（如 deepseek-v4-flash-free），不加 opencode/ 前缀
+                // 模型 ID 为纯名称（如 nemotron-3-ultra-free），不加 opencode/ 前缀。
+                // 免费档必须带 x-session-id，否则返回 MissingSessionID（见 companion.sessionId）。
                 Endpoint(
                     url = SettingsKeys.ZEN_BASE_URL,
                     model = zenModelOption,
                     authHeader = "Bearer ${SettingsKeys.ZEN_PUBLIC_KEY}",
-                    temperature = null
+                    temperature = null,
+                    extraHeaders = appContext?.let {
+                        mapOf("x-session-id" to sessionId(it))
+                    } ?: emptyMap()
                 )
             }
             else -> {
@@ -115,6 +204,7 @@ class AiApiClient(
         if (endpoint.authHeader != null) {
             requestBuilder.addHeader("Authorization", endpoint.authHeader)
         }
+        endpoint.extraHeaders.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
         val request = requestBuilder.post(requestBody).build()
 
         val factory = EventSources.createFactory(client)
@@ -242,6 +332,7 @@ class AiApiClient(
             if (endpoint.authHeader != null) {
                 requestBuilder.addHeader("Authorization", endpoint.authHeader)
             }
+            endpoint.extraHeaders.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
             val request = requestBuilder.post(requestBody).build()
 
             val httpClient = client.newBuilder()

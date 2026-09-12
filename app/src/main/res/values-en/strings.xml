@@ -49,6 +49,19 @@
     <string name="image_compressing">Compressing image…</string>
     <string name="toast_file_attached">Attachment added</string>
     <string name="toast_file_reading">Reading file…</string>
+    <!-- Attachment card & full-text viewer -->
+    <string name="attach_view_full">View full text</string>
+    <string name="attach_file_meta">%1$d chars · %2$d lines</string>
+    <string name="attach_token_estimate">~%1$d tokens</string>
+    <string name="attach_copy">Copy</string>
+    <string name="attach_copied">Copied</string>
+    <string name="attach_read_failed">Preview unavailable</string>
+    <string name="close">Close</string>
+    <!-- Model list (fetched dynamically) -->
+    <string name="model_loading">Fetching model list…</string>
+    <string name="model_load_failed">Fetch failed — showing built-in list</string>
+    <string name="model_refresh">Refresh</string>
+    <string name="model_unavailable_label">%1$s (unavailable)</string>
 
     <!-- Toasts -->
     <string name="toast_config_saved">Settings saved</string>
@@ -188,6 +201,8 @@
     <string name="archiving_message">Analyzing the conversation to extract character memory…</string>
     <string name="archive_wait_streaming">Wait for the reply to finish before archiving</string>
     <string name="archive_already_done">Memory already archived for this session</string>
+    <string name="archive_locked_hint">This session is archived and locked — cannot send messages</string>
+    <string name="archive_composer_locked">This session is archived — conversation closed</string>
     <string name="archive_need_character">Bind a character card first to archive memory</string>
     <string name="archive_card_missing">Character card not found</string>
     <string name="archive_no_messages">No conversation content to analyze</string>
@@ -444,6 +459,7 @@
     <string name="adventure_selected_roles">%d characters selected</string>
 
     <!-- Splash -->
+    <string name="splash_init_text">Initializing environment…</string>
     <string name="splash_crash_title">Issue on last launch</string>
     <string name="splash_crash_msg">The app ran into an issue last time. You can copy the details and send them to me so I can fix it.</string>
     <string name="splash_crash_copy">Copy &amp; report</string>

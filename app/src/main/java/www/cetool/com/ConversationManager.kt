@@ -237,12 +237,20 @@ object ConversationManager {
                 if (msg.attachmentType == Message.ATTACH_TYPE_IMAGE && msg.attachmentData != null) {
                     val mimeType = if (msg.attachmentName?.lowercase()?.endsWith(".png") == true) "image/png" else "image/jpeg"
                     historyItems.add(MessageItem.multimodal(msg.role, msg.content, msg.attachmentData, mimeType))
+                } else if (msg.attachmentType == Message.ATTACH_TYPE_TEXT && msg.attachmentData != null) {
+                    // 文本附件作为独立 file 内容块发送，用户消息正文保持纯净。
+                    // displayText() 会剥离旧版遗留在正文里的 "[文件: 名]\n<全文>" 前缀，
+                    // 否则旧数据会把文件全文既当正文又当 file 块发送两次。
+                    historyItems.add(
+                        MessageItem.withFile(
+                            role = msg.role,
+                            text = msg.displayText(),
+                            fileName = msg.attachmentName ?: "attachment.txt",
+                            fileData = msg.attachmentData
+                        )
+                    )
                 } else {
-                    var textContent = msg.content
-                    if (msg.attachmentType == Message.ATTACH_TYPE_TEXT && msg.attachmentData != null) {
-                        textContent = "[文件: ${msg.attachmentName}]\n${msg.attachmentData}\n\n${msg.content}"
-                    }
-                    historyItems.add(MessageItem.text(msg.role, textContent))
+                    historyItems.add(MessageItem.text(msg.role, msg.content))
                 }
             }
         }
@@ -272,7 +280,7 @@ object ConversationManager {
             ?: SettingsKeys.KILO_MODEL
         val zenModelOption = providerPrefs.getString(SettingsKeys.KEY_ZEN_MODEL, SettingsKeys.ZEN_MODEL_DEFAULT)
             ?: SettingsKeys.ZEN_MODEL_DEFAULT
-        val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption)
+        val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption, appContext)
         val eventSource = client.sendChatStream(
             messages = historyItems,
             onModelInfo = onModelInfo,

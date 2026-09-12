@@ -191,6 +191,13 @@ class CharacterEditActivity : ComponentActivity() {
         val personality = listOf(fields.externalPersonality, fields.internalPersonality)
             .filter { it.isNotBlank() }.joinToString("；")
 
+        // 保留原有 extensions：否则会把 sachat_worldbook_id（角色卡内嵌世界书绑定）
+        // 以及酒馆原生 extensions（depth_prompt / world_book 等）一并抹掉，
+        // 导致编辑一次角色卡后其内嵌世界书永久不再注入。
+        val oldExtensions = editCharacterId
+            ?.let { CharacterManager.loadCard(this, it)?.data?.extensions }
+            ?: emptyMap()
+
         val data = TavernCardData(
             name = name,
             description = description,
@@ -201,7 +208,7 @@ class CharacterEditActivity : ComponentActivity() {
             system_prompt = state.systemPrompt.trim(),
             post_history_instructions = state.postHistory.trim(),
             tags = state.legacyTags,
-            extensions = emptyMap()
+            extensions = oldExtensions
         ).withCharacterFields(fields)
 
         val card = TavernCard(data = data, avatarBase64 = avatar)

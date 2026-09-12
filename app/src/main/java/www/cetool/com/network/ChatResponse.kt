@@ -34,3 +34,20 @@ data class ErrorDetail(
     val type: String?,
     val code: String?
 )
+
+/**
+ * GET /models 响应（OpenAI 风格）。
+ *
+ * 两个免费网关的字段有差异，用可选字段兼容：
+ * - OpenKilo：`{data:[{id, name, isFree, ...}]}`（isFree 为可靠的免费标记）
+ * - OpenCode Zen：`{object:"list", data:[{id, object, created, owned_by}]}`（无 isFree，按 id 含 "free" 判定）
+ */
+data class ModelListResponse(
+    val data: List<ModelItem>?
+)
+
+data class ModelItem(
+    val id: String = "",
+    val name: String? = null,
+    val isFree: Boolean? = null
+)

@@ -163,6 +163,8 @@ class ChatActivity : ComponentActivity() {
     private var isStreaming by mutableStateOf(false)
     private var isEmptyConversation by mutableStateOf(true)
     private var isAdventure by mutableStateOf(false)
+    /** 当前对话已封存（锁定发送）：用于置灰输入栏 */
+    private var isArchivedConversation by mutableStateOf(false)
     private var backgroundDrawable by mutableStateOf<Drawable?>(null)
     // 默认不高亮，点击导航项后才高亮（用户要求）
     private var activeNavId by mutableStateOf("")
@@ -385,6 +387,11 @@ class ChatActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val ctx = this@ChatActivity
 
+        // 返回键先关抽屉，而不是直接退出应用
+        BackHandler(enabled = drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        }
+
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -571,7 +578,12 @@ class ChatActivity : ComponentActivity() {
                         }
                     }
                     MenuItem(Icons.Filled.Refresh, getString(R.string.menu_retry)) { retryLastMessage() }
-                    MenuItem(Icons.Filled.Save, getString(R.string.menu_archive_memory)) { handleArchiveMemory() }
+                    // 可预期的失败路径不做成可点入口：非角色对话/已封存时置灰
+                    MenuItem(
+                        Icons.Filled.Save,
+                        getString(R.string.menu_archive_memory),
+                        enabled = canArchiveMemory
+                    ) { handleArchiveMemory() }
                     MenuItem(Icons.Filled.FileOpen, getString(R.string.menu_import_chat_log)) {
                         chatLogImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     }
@@ -682,7 +694,10 @@ class ChatActivity : ComponentActivity() {
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-                IconButton(onClick = { showFilePicker() }) {
+                IconButton(
+                    onClick = { showFilePicker() },
+                    enabled = !isArchivedConversation
+                ) {
                     Icon(
                         imageVector = Icons.Filled.AttachFile,
                         contentDescription = getString(R.string.attach_file),
@@ -693,10 +708,20 @@ class ChatActivity : ComponentActivity() {
                 TextField(
                     value = inputText,
                     onValueChange = { inputText = it },
+                    enabled = !isArchivedConversation,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 40.dp, max = 120.dp),
-                    placeholder = { Text(inputHint.ifBlank { getString(R.string.hint_input) }, fontSize = 14.sp) },
+                    placeholder = {
+                        Text(
+                            text = if (isArchivedConversation) {
+                                getString(R.string.archive_composer_locked)
+                            } else {
+                                inputHint.ifBlank { getString(R.string.hint_input) }
+                            },
+                            fontSize = 14.sp
+                        )
+                    },
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp),
                     maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -715,6 +740,7 @@ class ChatActivity : ComponentActivity() {
                 Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = { sendMessage() },
+                    enabled = !isArchivedConversation,
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Text(getString(R.string.btn_send))
@@ -1006,16 +1032,24 @@ class ChatActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
+    private fun MenuItem(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
         DropdownMenuItem(
             text = { Text(label) },
             leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+            enabled = enabled,
             onClick = {
                 showPopupMenu = false
                 onClick()
             }
         )
     }
+
+    /** 是否可执行记忆封存：需绑定角色、且尚未封存（与 handleArchiveMemory 的前置条件一致） */
+    private val canArchiveMemory: Boolean
+        get() {
+            val conv = currentConversation ?: return false
+            return conv.characterId != null && !conv.isArchived
+        }
 
     // ───────────────────────── 对话框 ─────────────────────────
 
@@ -1243,6 +1277,8 @@ class ChatActivity : ComponentActivity() {
                 Column(
                     modifier = Modifier
                         .heightIn(max = 360.dp)
+                        // 命中项可能很多：不限高可滚动的话超出部分看不到也点不到
+                        .verticalScroll(rememberScrollState())
                         .padding(top = 4.dp)
                 ) {
                     searchResults.forEach { (label, position) ->
@@ -1788,6 +1824,7 @@ class ChatActivity : ComponentActivity() {
         bindingWorldState.value = conv.boundWorldIds().mapNotNull { WorldInfoManager.load(this, it)?.name }
         systemPromptState.value = conv.systemPrompt
         isAdventure = conv.adventureRoleIds.isNotEmpty()
+        isArchivedConversation = conv.isArchived
 
         isEmptyConversation = conv.messages.isEmpty()
         if (!isEmptyConversation) {
@@ -1840,7 +1877,8 @@ class ChatActivity : ComponentActivity() {
                 thinkingLevel = if (thinkingEnabled) thinkingLevel else null,
                 providerMode = providerMode,
                 kiloModelOption = kiloModel,
-                zenModelOption = zenModel
+                zenModelOption = zenModel,
+                appContext = applicationContext
             )
             runOnUiThread {
                 showArchiving = false
@@ -1939,6 +1977,12 @@ class ChatActivity : ComponentActivity() {
 
     private fun performSend(text: String) {
         val conv = currentConversation ?: return
+        // 封存态守卫必须放在清空输入/附件之前：否则 ConversationManager.sendMessage 会静默
+        // return（isArchived），用户看到的是"文字被吞、顶栏卡在正在获取模型"
+        if (conv.isArchived) {
+            Toast.makeText(this, getString(R.string.archive_locked_hint), Toast.LENGTH_SHORT).show()
+            return
+        }
         if (conv.isStreaming) {
             Toast.makeText(this, R.string.toast_sending, Toast.LENGTH_SHORT).show()
             return
@@ -1980,6 +2024,12 @@ class ChatActivity : ComponentActivity() {
 
     private fun retryLastMessage() {
         val conv = currentConversation ?: return
+        // 同一守卫必须放在两个 removeAt 之前：否则封存态下点"重试"会先把这一轮
+        // 用户+助手消息删掉，再由 performSend 静默 no-op，导致整轮对话永久丢失
+        if (conv.isArchived) {
+            Toast.makeText(this, getString(R.string.archive_locked_hint), Toast.LENGTH_SHORT).show()
+            return
+        }
         if (conv.isStreaming) {
             Toast.makeText(this, R.string.toast_sending, Toast.LENGTH_SHORT).show()
             return
