@@ -327,8 +327,10 @@ private fun ChatAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
     val bitmap = remember(avatarBase64) {
         if (avatarBase64 == null) null
         else try {
-            BitmapFactory.decodeByteArray(Base64.decode(avatarBase64, Base64.DEFAULT), 0, 0)
-        } catch (_: Exception) { null }
+            val bytes = Base64.decode(avatarBase64, Base64.DEFAULT)
+            // 第三个参数是要解析的字节数，必须传实际长度（传 0 会返回 null 且不抛异常）
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
     }
     Box(
         modifier = modifier.clip(CircleShape),

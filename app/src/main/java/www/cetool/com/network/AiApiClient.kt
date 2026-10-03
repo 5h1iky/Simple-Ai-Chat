@@ -59,6 +59,12 @@ class AiApiClient(
     companion object {
         private const val KEY_SESSION_ID = "zen_session_id"
 
+        /** A2：地址非法时返回的空 EventSource（无需 OkHttp 线程，也无需真实请求） */
+        private val EMPTY_EVENT_SOURCE = object : EventSource {
+            override fun request(): Request = Request.Builder().url("http://localhost/").build()
+            override fun cancel() = Unit
+        }
+
         @Volatile
         private var sessionIdCache: String? = null
 
@@ -184,6 +190,15 @@ class AiApiClient(
     ): EventSource {
         val endpoint = resolveEndpoint()
 
+        // A2：OkHttp 在 URL 形态非法时（如缺少 http(s):// scheme）会抛
+        // IllegalArgumentException。这里在构建 request 之前拦住并通过 onError 上报，
+        // 否则异常会穿透到 Compose 点击回调 → 主线程崩溃。
+        val urlError = ApiConfig.validateUrl(endpoint.url)
+        if (urlError != null) {
+            onError(urlError)
+            return EMPTY_EVENT_SOURCE
+        }
+
         val chatRequest = ChatRequest(
             model = endpoint.model,
             messages = messages,
@@ -212,11 +227,24 @@ class AiApiClient(
         var inReasoning = false
         var tagBuffer = ""
         var modelReported = false
+        // B13：`[DONE]` 分支、`finish_reason == "stop"` 分支、`onClosed` 回调都会走到这里，
+        // 正常一轮至少触发两次 → onFinish 被调用多次 → save() 重复 + UI 多次全量刷新。
+        // 用标志位保证一轮请求只落一次。
+        var finished = false
 
         // Free Gateway: 流结束时若未收到过 model 字段，回调 (null, null) 表示获取失败
         fun finishStream() {
+            if (finished) return
+            finished = true
             if (!modelReported) onModelInfo?.invoke(null, null)
             onFinish()
+        }
+
+        /** B12：失败路径同样要收尾，否则 OkHttp 不会再回调 onClosed，
+         *  onModelInfo(null, null) 永不触发 → 顶栏永远停在「正在获取模型…」 */
+        fun failStream(message: String) {
+            finished = true
+            onError(message)
         }
 
         val eventSource = factory.newEventSource(request, object : EventSourceListener() {
@@ -278,18 +306,24 @@ class AiApiClient(
                     }
 
                     if (choice.finish_reason == "stop") finishStream()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    // D7：原实现 catch (_: Exception) {} 会把「分片解析失败」与
+                    // 「onText/onReasoning 回调自身抛错」一起静默吞掉，线上完全无法定位。
+                    // 这里解析失败仅跳过该分片并记录；回调异常则透出给上层处理。
+                    android.util.Log.w("AiApiClient", "SSE 分片解析失败: ${e.message}", e)
+                }
             }
 
             override fun onFailure(
                 eventSource: EventSource, t: Throwable?, response: okhttp3.Response?
             ) {
+                if (finished) return
                 val errorMsg = if (response != null) {
                     "HTTP ${response.code}: ${response.message}"
                 } else {
                     t?.message ?: "未知网络错误"
                 }
-                onError(errorMsg)
+                failStream(errorMsg)
             }
 
             override fun onClosed(eventSource: EventSource) {

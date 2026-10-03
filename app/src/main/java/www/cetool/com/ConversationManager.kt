@@ -19,6 +19,9 @@ import www.cetool.com.network.MessageItem
 
 object ConversationManager {
 
+    /** 允许用于深度注入的消息角色（injectRole 可能来自不可信的酒馆文件） */
+    private val VALID_ROLES = setOf("system", "user", "assistant")
+
     /** 冒险模式 DM/GM 系统指令（中英双语资源，跟随 UI 语言） */
     val ADVENTURE_DM_PROMPT: String
         get() = appContext.getString(R.string.adventure_dm_prompt)
@@ -32,6 +35,11 @@ object ConversationManager {
     private lateinit var prefs: SharedPreferences
     private lateinit var appContext: Context
 
+    /** 是否已初始化过（A4：重复 init 会把正在流式的 Conversation 实例换掉） */
+    private var initialized = false
+
+    private val lock = Any()
+
     private val conversations = mutableListOf<Conversation>()
     private var currentIndex = 0
 
@@ -40,9 +48,21 @@ object ConversationManager {
     var onConversationsChanged: (() -> Unit)? = null
     var onCurrentMessageUpdated: ((conversationId: String) -> Unit)? = null
 
+    /**
+     * A4：幂等初始化。
+     *
+     * 原实现每次调用都会 `load()` → `conversations.clear()` 并从磁盘**重建全新实例**，
+     * 而在飞的 SSE 回调仍持有旧对象 → 后续分片全部写进孤儿对象（界面看不到、save 也不保存），
+     * `load()` 还顺带把 `isStreaming` 置 false 让发送守卫失效。
+     * 现在重复调用只保证 prefs/context 就绪，不再打断进行中的流式请求。
+     */
     fun init(context: Context) {
         appContext = context.applicationContext
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        synchronized(lock) {
+            if (initialized) return
+            initialized = true
+        }
         load()
     }
 
@@ -66,6 +86,7 @@ object ConversationManager {
         conversations.add(conv)
         currentIndex = conversations.size - 1
         save()
+        saveCurrentId()          // B18：新建也要更新 KEY_CURRENT_ID，否则杀进程后回到旧会话
         onConversationsChanged?.invoke()
         return conv
     }
@@ -86,13 +107,17 @@ object ConversationManager {
         if (index < 0) return false
         cancelStream(id)
         conversations.removeAt(index)
-        if (currentIndex >= conversations.size) {
-            currentIndex = (conversations.size - 1).coerceAtLeast(0)
-        }
+        // B19：删除项在当前项「之前」时，索引要跟着下移，否则当前会话被悄悄换成下一条
+        currentIndex = when {
+            index < currentIndex -> currentIndex - 1
+            index == currentIndex -> index.coerceAtMost((conversations.size - 1).coerceAtLeast(0))
+            else -> currentIndex
+        }.coerceIn(0, (conversations.size - 1).coerceAtLeast(0))
         if (conversations.isEmpty()) {
             createNew()
         }
         save()
+        saveCurrentId()          // B18：删除后该键不能仍指向已删除的 id
         onConversationsChanged?.invoke()
         return true
     }
@@ -153,6 +178,8 @@ object ConversationManager {
         var charExamples = ""
         var extraSystemPrompt = ""
         var characterLoreId: String? = null
+        // {{char}} 的角色名来源；顺带避免下面 post_history 重复读盘（193/289 原本各读一次）
+        var activeCard: www.cetool.com.model.TavernCard? = null
 
         if (conv.adventureRoleIds.isNotEmpty()) {
             // 冒险模式（2.2）：DM 指令 + 多角色卡定义
@@ -167,6 +194,7 @@ object ConversationManager {
         } else if (conv.characterId != null) {
             val card = CharacterManager.loadCard(appContext, conv.characterId!!)
             if (card != null) {
+                activeCard = card
                 val compiled = CharacterManager.compileCharacter(card)
                 charDefinition = compiled.definition
                 charExamples = compiled.examples
@@ -216,15 +244,6 @@ object ConversationManager {
             historyItems.add(MessageItem.text("system", Conversation.resolveSystemPrompt(systemText)))
         }
 
-        val settingsPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
-        val userName = settingsPrefs.getString(SettingsKeys.KEY_USER_NAME, "用户") ?: "用户"
-        historyItems.replaceAll { item ->
-            val text = item.content.asJsonPrimitive?.asString ?: return@replaceAll item
-            if (text.contains("{{user}}")) {
-                MessageItem.text(item.role, text.replace("{{user}}", userName))
-            } else item
-        }
-
         // 记忆历史消息轮数（全局设置，钳制在 5~100 范围内）
         val maxHistory = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .getInt(SettingsKeys.KEY_MAX_HISTORY, Conversation.MAX_HISTORY)
@@ -255,21 +274,43 @@ object ConversationManager {
             }
         }
 
-        // @D 深度注入：从末尾数第 injectDepth 条消息的位置插入 system 消息（酒馆语义，depth 0 = 提示词底部）
+        // @D 深度注入：从末尾数第 injectDepth 条消息的位置插入 system 消息（酒馆语义，depth 0 = 提示词底部）。
+        // 此时 historyItems 的末尾是**最新的用户消息**（构造循环排除了尾部空的 assistant 占位），
+        // 要让 depth=0 落在它之后，插入点应是 size - depth（原实现 size-1-depth 整体差一位）。
         if (injection != null && injection.atDepth.isNotEmpty()) {
             for (entry in injection.atDepth) {
                 if (entry.content.isBlank()) continue
                 val depth = entry.injectDepth.coerceAtLeast(0)
-                val insertIndex = (historyItems.size - 1 - depth).coerceIn(0, historyItems.size)
-                historyItems.add(insertIndex, MessageItem.text("system", entry.content))
+                val insertIndex = (historyItems.size - depth).coerceIn(0, historyItems.size)
+                // 酒馆：@D 条目可指定注入角色（system/user/assistant），默认 system
+                val role = entry.injectRole?.takeIf { it in VALID_ROLES } ?: "system"
+                historyItems.add(insertIndex, MessageItem.text(role, entry.content))
             }
         }
 
-        if (conv.characterId != null) {
-            val card = CharacterManager.loadCard(appContext, conv.characterId!!)
-            if (card != null && card.data.post_history_instructions.isNotBlank()) {
+        if (conv.characterId != null && activeCard == null) {
+            activeCard = CharacterManager.loadCard(appContext, conv.characterId!!)
+        }
+        activeCard?.let { card ->
+            if (card.data.post_history_instructions.isNotBlank()) {
                 historyItems.add(MessageItem.text("system", card.data.post_history_instructions))
             }
+        }
+
+        // B21：宏替换必须在**所有 historyItems 装配完成之后**执行。
+        // 原实现放在历史消息入列之前，那时 historyItems 里只有 system 一条，
+        // 于是 first_mes、世界书内容、用户自己输入的 {{user}} 都替换不到；
+        // {{char}} 此前全项目无实现，导致角色卡里大量使用的 {{char}} 以字面量进入上下文。
+        val settingsPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        val macroUserName = settingsPrefs.getString(SettingsKeys.KEY_USER_NAME, "用户")?.ifBlank { "用户" } ?: "用户"
+        val macroCharName = charDisplayName(conv, activeCard)
+        historyItems.replaceAll { item ->
+            val text = item.content.asJsonPrimitive?.asString ?: return@replaceAll item
+            if (!text.contains("{{")) return@replaceAll item
+            MessageItem.text(
+                item.role,
+                text.replace("{{user}}", macroUserName).replace("{{char}}", macroCharName)
+            )
         }
 
         // Free Gateway: OpenKilo / OpenCode Zen 从 SharedPreferences 读取模式与模型选择并传给网络层
@@ -381,7 +422,15 @@ object ConversationManager {
                 currentId = conversations.getOrNull(currentIndex)?.id ?: ""
             )
             val json = gson.toJson(data)
-            prefs.edit().putString(KEY_DATA, json).apply()
+            synchronized(lock) {
+                prefs.edit()
+                    .putString(KEY_DATA, json)
+                    // B18：KEY_CURRENT_ID 只在 switchTo() 里写，而 load() 又优先读它。
+                    // 于是「切历史会话 → 新建会话 → 杀进程」会回到那个历史会话。
+                    // 让每次 save 同步该键，两个来源才不会打架。
+                    .putString(KEY_CURRENT_ID, data.currentId)
+                    .apply()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -437,6 +486,20 @@ object ConversationManager {
         if (!::prefs.isInitialized) return
         val id = conversations.getOrNull(currentIndex)?.id ?: ""
         prefs.edit().putString(KEY_CURRENT_ID, id).apply()
+    }
+
+    /**
+     * {{char}} 的取值：角色卡名字优先，其次是 AI 显示名。
+     * 冒险模式无单一主角时退回 AI 显示名。
+     */
+    private fun charDisplayName(
+        conv: Conversation,
+        card: www.cetool.com.model.TavernCard? = null
+    ): String {
+        val aiName = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(SettingsKeys.KEY_AI_NAME, "AI")?.ifBlank { "AI" } ?: "AI"
+        val cardName = card?.data?.name?.trim().orEmpty()
+        return cardName.ifBlank { aiName }
     }
 
     fun getDefaultSystemPrompt(): String {

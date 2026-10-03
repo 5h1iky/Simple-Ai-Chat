@@ -11,6 +11,44 @@ data class TavernCard(
     val avatarBase64: String? = null
 )
 
+/**
+ * 角色卡内嵌世界书（酒馆 `data.character_book`）。
+ *
+ * 酒馆把角色卡自带的世界书放在这里（**不是** `extensions.world_book`），
+ * 且 `entries` 是**数组**、字段用 `keys`/`secondary_keys`/`constant`/`insertion_order`
+ * 与蛇形命名（角色书的规定写法见 SillyTavern Character Book 规范）。
+ */
+data class CharacterBook(
+    val name: String? = null,
+    val description: String? = null,
+    val scan_depth: Int? = null,
+    val token_budget: Int? = null,
+    val recursive_scanning: Boolean? = null,
+    val extensions: Map<String, JsonElement> = emptyMap(),
+    val entries: List<CharacterBookEntry> = emptyList()
+)
+
+data class CharacterBookEntry(
+    val keys: List<String> = emptyList(),
+    val secondary_keys: List<String> = emptyList(),
+    val content: String = "",
+    val comment: String = "",
+    val name: String? = null,
+    val constant: Boolean = false,
+    val selective: Boolean = false,
+    val selectiveLogic: Int = 0,
+    val insertion_order: Int = 100,
+    val enabled: Boolean = true,
+    val case_sensitive: Boolean? = null,
+    val match_whole_words: Boolean? = null,
+    val use_regex: Boolean = false,
+    val scan_depth: Int? = null,
+    val priority: Int? = null,
+    /** 角色卡条目的位置是字符串：`"before_char"` / `"after_char"` */
+    val position: String? = null,
+    val extensions: Map<String, JsonElement> = emptyMap()
+)
+
 data class TavernCardData(
     val name: String = "",
     val description: String = "",
@@ -25,7 +63,19 @@ data class TavernCardData(
     val creator: String = "",
     val character_version: String = "1.0",
     val alternate_greetings: List<String> = emptyList(),
-    val extensions: Map<String, JsonElement> = emptyMap()
+    val extensions: Map<String, JsonElement> = emptyMap(),
+
+    // ─── v3 附加字段（B28：原本缺模型 → 导入即被 Gson 丢弃） ───
+    val nickname: String = "",
+    val source: List<String> = emptyList(),
+    val group_only_greetings: List<String> = emptyList(),
+    val creation_date: Long = 0L,
+    val modification_date: Long = 0L,
+    val creator_notes_multilingual: Map<String, String> = emptyMap(),
+    val assets: List<CharacterAsset> = emptyList(),
+
+    // ─── 角色卡内嵌世界书（B1：酒馆规范字段是 data.character_book） ───
+    val character_book: CharacterBook? = null
 ) {
     fun isVaild(): Boolean = name.isNotBlank()
 
@@ -53,6 +103,15 @@ data class TavernCardData(
         return copy(extensions = newExtensions)
     }
 }
+
+/** v3 资源文件描述（`data.assets`，如内置头像/表情包） */
+data class CharacterAsset(
+    val type: String = "",
+    val name: String = "",
+    val ext: String = "",
+    val uri: String = "",
+    val data: String? = null
+)
 
 /**
  * 角色卡结构化字段（借鉴 MuseAI 的 PartnerItemFields，按模块组织）

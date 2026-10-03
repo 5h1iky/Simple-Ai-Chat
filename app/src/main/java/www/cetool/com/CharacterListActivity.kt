@@ -46,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -142,7 +143,9 @@ class CharacterListActivity : ComponentActivity() {
                     onExport = { char -> onExport(char.id, char.name) },
                     onNew = { openEditor(null) },
                     onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
-                    isManageMode = isManageMode
+                    isManageMode = isManageMode,
+                    refreshTick = refreshTick.intValue,
+                    onRefresh = { refreshTick.intValue++ }
                 )
             }
         }
@@ -178,15 +181,12 @@ class CharacterListActivity : ComponentActivity() {
         }
     }
 
-    private fun refresh() {
-        // 通过重建 UI 状态刷新：简单方式为 setContent 中的 remember 依赖一个可变计数器
-        uiRefreshCount++
-    }
+    // A5：必须是 Compose 的可观察状态，普通 Int 自增不会触发重组。
+    // （原实现用 companion object 里的普通 Int，导致删除/导入/新建后列表不刷新）
+    private val refreshTick = mutableIntStateOf(0)
 
-    companion object {
-        var uiRefreshCount = 0
-            private set
-        fun bumpRefresh() { uiRefreshCount++ }
+    private fun refresh() {
+        refreshTick.intValue++
     }
 }
 
@@ -201,9 +201,10 @@ private fun CharacterListScreen(
     onExport: (CharacterInfo) -> Unit,
     onNew: () -> Unit,
     onImport: () -> Unit,
-    isManageMode: Boolean
+    isManageMode: Boolean,
+    refreshTick: Int,
+    onRefresh: () -> Unit = {}
 ) {
-    var refreshTick by remember { mutableStateOf(CharacterListActivity.uiRefreshCount) }
     val characters = remember(refreshTick) { loadCharacters() }
     var pendingDelete by remember { mutableStateOf<CharacterInfo?>(null) }
 
@@ -276,7 +277,7 @@ private fun CharacterListScreen(
                     TextButton(onClick = {
                         onDelete(char.id)
                         pendingDelete = null
-                        CharacterListActivity.bumpRefresh()
+                        onRefresh()          // 删除后立刻刷新列表（A5）
                     }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -338,7 +339,9 @@ fun CharacterAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
     val bitmap = remember(avatarBase64) {
         if (avatarBase64 == null) null
         else try {
-            BitmapFactory.decodeByteArray(Base64.decode(avatarBase64, Base64.DEFAULT), 0, 0)
+            val bytes = Base64.decode(avatarBase64, Base64.DEFAULT)
+            // 第三个参数是要解析的字节数，必须传实际长度（传 0 会返回 null 且不抛异常）
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 ?.let { b ->
                     // 限制尺寸防止超大图
                     val max = 256
@@ -347,7 +350,7 @@ fun CharacterAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
                         android.graphics.Bitmap.createScaledBitmap(b, (b.width * scale).toInt(), (b.height * scale).toInt(), true)
                     } else b
                 }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
     }
 
     Box(

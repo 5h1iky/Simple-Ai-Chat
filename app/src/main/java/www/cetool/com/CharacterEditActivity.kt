@@ -191,24 +191,20 @@ class CharacterEditActivity : ComponentActivity() {
         val personality = listOf(fields.externalPersonality, fields.internalPersonality)
             .filter { it.isNotBlank() }.joinToString("；")
 
-        // 保留原有 extensions：否则会把 sachat_worldbook_id（角色卡内嵌世界书绑定）
-        // 以及酒馆原生 extensions（depth_prompt / world_book 等）一并抹掉，
-        // 导致编辑一次角色卡后其内嵌世界书永久不再注入。
-        val oldExtensions = editCharacterId
-            ?.let { CharacterManager.loadCard(this, it)?.data?.extensions }
-            ?: emptyMap()
-
-        val data = TavernCardData(
+        // A3 / B1 / B28：重建 TavernCardData 会让未列出的字段全部回落到默认值，
+        // 导致 scenario / creator / creator_notes / character_version / alternate_greetings /
+        // character_book / assets / nickname 等被永久清空（覆写文件不可逆）。
+        // 正确做法是 copy 原对象，只改编辑界面真正拥有的那几项。
+        val old = editCharacterId?.let { CharacterManager.loadCard(this, it)?.data }
+        val data = (old ?: TavernCardData()).copy(
             name = name,
             description = description,
             personality = personality,
-            scenario = "",
             first_mes = state.firstMes.trim(),
             mes_example = state.mesExample.trim(),
             system_prompt = state.systemPrompt.trim(),
             post_history_instructions = state.postHistory.trim(),
-            tags = state.legacyTags,
-            extensions = oldExtensions
+            tags = state.legacyTags
         ).withCharacterFields(fields)
 
         val card = TavernCard(data = data, avatarBase64 = avatar)
