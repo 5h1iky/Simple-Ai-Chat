@@ -159,13 +159,20 @@ class CharacterListActivity : ComponentActivity() {
 
     private fun handleImport(uri: Uri) {
         try {
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val json = inputStream.bufferedReader().use { it.readText() }
-            val card = TavernCardImporter.parse(json).getOrNull()
+            // B29：导入入口允许选 */*（含 PNG 卡），原来一律按 UTF-8 文本读，
+            // PNG 二进制必然解析失败。改为读原始字节，由 importer 自动识别容器。
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: run {
+                    Toast.makeText(this, getString(R.string.char_list_import_failed, ""), Toast.LENGTH_SHORT).show()
+                    return
+                }
+            val card = TavernCardImporter.parseBytes(bytes).getOrNull()
             if (card == null) {
                 Toast.makeText(this, getString(R.string.char_list_invalid), Toast.LENGTH_LONG).show()
                 return
             }
+            // 用「规范化的 JSON」落库，保证后续编辑/导出拿到干净数据
+            val json = TavernCardImporter.export(card)
             val id = CharacterManager.save(this, json) ?: run {
                 Toast.makeText(this, getString(R.string.import_save_failed), Toast.LENGTH_SHORT).show()
                 return

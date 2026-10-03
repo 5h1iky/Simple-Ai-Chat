@@ -1662,10 +1662,10 @@ class ChatActivity : ComponentActivity() {
 
     private fun handleCharacterImport(uri: Uri) {
         try {
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val json = inputStream.bufferedReader().use { it.readText() }
+            // B29：该入口允许选 */*（含 PNG 卡），改为读原始字节由 importer 识别容器
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return
 
-            val card = TavernCardImporter.parse(json)
+            val card = TavernCardImporter.parseBytes(bytes)
             if (card.isFailure) {
                 Toast.makeText(this, getString(R.string.card_format_invalid, card.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
                 return
@@ -1674,7 +1674,8 @@ class ChatActivity : ComponentActivity() {
             val tavernCard = card.getOrNull() ?: return
             importPendingName = tavernCard.data.name
             importPendingDesc = tavernCard.data.description.take(200)
-            importPendingJson = json
+            // 落库用规范化 JSON（PNG/v1 卡也能得到干净数据）
+            importPendingJson = TavernCardImporter.export(tavernCard)
             showImportConfirm = true
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.file_read_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
@@ -2138,27 +2139,21 @@ class ChatActivity : ComponentActivity() {
                     Toast.makeText(this, R.string.toast_file_attached, Toast.LENGTH_SHORT).show()
                 }
                 mimeType.startsWith("image/") -> {
-                    val inputStream = contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
-                    inputStream?.close()
-
+                    // D3：全尺寸解码 + score catch 抓不住 OOM → 高像素图片直接崩。
+                    // 改为采样解码（目标 2048px），并对 failure 统一提示。
+                    val bitmap = www.cetool.com.util.ImageDecoder.decode(this, uri, maxEdge = 2048)
                     if (bitmap == null) {
                         Toast.makeText(this, R.string.file_unsupported, Toast.LENGTH_SHORT).show()
                         return
                     }
 
-                    val maxSize = 2048
-                    val scale = Math.min(
-                        maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height
-                    ).coerceAtMost(1f)
-                    val scaledBitmap = if (scale < 1f) {
-                        Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-                    } else bitmap
-
-                    val outputStream = ByteArrayOutputStream()
-                    scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-                    val imageBytes = outputStream.toByteArray()
-                    outputStream.close()
+                    val imageBytes = www.cetool.com.util.ImageDecoder.compress(
+                        bitmap, Bitmap.CompressFormat.JPEG, 85, maxEdge = 2048
+                    )
+                    if (imageBytes == null) {
+                        Toast.makeText(this, R.string.file_read_failed, Toast.LENGTH_SHORT).show()
+                        return
+                    }
 
                     if (imageBytes.size > 20 * 1024 * 1024) {
                         Toast.makeText(this, R.string.file_too_large, Toast.LENGTH_SHORT).show()

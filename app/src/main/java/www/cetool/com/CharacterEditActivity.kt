@@ -134,28 +134,19 @@ class CharacterEditActivity : ComponentActivity() {
     }
 
     private fun handleAvatarPicked(uri: Uri) {
-        try {
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-            if (bitmap == null) return
-
-            val maxSize = 512
-            val scale = Math.min(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height).coerceAtMost(1f)
-            val scaled = if (scale < 1f) {
-                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-            } else bitmap
-
-            val outputStream = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-            val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
-            outputStream.close()
-
-            val state = avatarState
-            state?.value = base64
-        } catch (e: Exception) {
+        // D3：原实现全尺寸 decodeStream 后再缩放，且 catch (e: Exception) 抓不住
+        // OutOfMemoryError（它是 Error）→ 选一张高像素图片即崩。
+        val bitmap = www.cetool.com.util.ImageDecoder.decode(this, uri, maxEdge = 512)
+        if (bitmap == null) {
             Toast.makeText(this, getString(R.string.char_edit_avatar_failed), Toast.LENGTH_SHORT).show()
+            return
         }
+        val bytes = www.cetool.com.util.ImageDecoder.compress(bitmap, Bitmap.CompressFormat.JPEG, 80, maxEdge = 512)
+        if (bytes == null) {
+            Toast.makeText(this, getString(R.string.char_edit_avatar_failed), Toast.LENGTH_SHORT).show()
+            return
+        }
+        avatarState?.value = Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
     private fun saveCharacter(state: CharacterEditState, avatar: String?) {

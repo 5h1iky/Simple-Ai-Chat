@@ -122,6 +122,8 @@ class WorldInfoEditActivity : ComponentActivity() {
                 WorldInfoEditScreen(
                     name = name,
                     description = description,
+                    enabled = enabled,
+                    onEnabledChange = { enabled = it },
                     entries = entries,
                     onNameChange = { name = it },
                     onDescriptionChange = { description = it },
@@ -134,7 +136,7 @@ class WorldInfoEditActivity : ComponentActivity() {
                             id = editId ?: UUID.randomUUID().toString().take(8),
                             name = name.trim(),
                             description = description.trim(),
-                            // 启用状态由对话侧（长按对话 → 世界书设置）控制，编辑页不再提供开关
+                            // B4：书级 enabled 由本页「启用本书」开关写入（引擎 WorldInfoEngine.scan 会消费）
                             enabled = enabled,
                             entries = entries.toMutableList()
                         )
