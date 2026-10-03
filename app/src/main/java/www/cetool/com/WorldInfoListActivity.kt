@@ -53,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import www.cetool.com.importer.WorldInfoImporter
+import www.cetool.com.manager.BROKEN_ENTRY_NAME
 import www.cetool.com.manager.WorldInfoManager
 import www.cetool.com.manager.WorldInfoManager.WorldInfoSummary
 import www.cetool.com.ui.components.TagRow
@@ -99,7 +100,12 @@ class WorldInfoListActivity : ComponentActivity() {
     }
 
     private fun onExport(worldInfoId: String, name: String) {
-        val json = WorldInfoManager.rawJson(this, worldInfoId)
+        // B27：原来导出的是**自有格式**（{version,type,data:{entries:[...]}} 数组 + camelCase），
+        // 而酒馆世界书是 {entries:{uid:{keys:[...],insertion_order:...}}} 对象 + snake_case
+        // → 编辑一次再导出，导回酒馆会失败/丢键。
+        // 现在导出真正的酒馆标准格式，让文件能被酒馆直接导入。
+        val json = WorldInfoManager.exportSillyTavern(this, worldInfoId)
+            ?: WorldInfoManager.rawJson(this, worldInfoId)
         if (json == null) {
             Toast.makeText(this, getString(R.string.world_list_export_unreadable), Toast.LENGTH_SHORT).show()
             return
@@ -121,6 +127,16 @@ class WorldInfoListActivity : ComponentActivity() {
             SAChatTheme {
                 WorldInfoListScreen(
                     loadWorldInfos = { WorldInfoManager.list(this) },
+                    loadBrokenCounts = { summaries ->
+                        // B26：每本世界书的损坏条目数（load 会把解析失败的条目换成哨兵条目，数它即可）
+                        summaries.associate { summary ->
+                            val count = WorldInfoManager.load(this, summary.id)
+                                ?.entries
+                                ?.count { it.name == BROKEN_ENTRY_NAME }
+                                ?: 0
+                            summary.id to count
+                        }
+                    },
                     tick = refreshTick.intValue,
                     onBack = { finish() },
                     onPick = { id ->
@@ -183,6 +199,7 @@ class WorldInfoListActivity : ComponentActivity() {
 @Composable
 private fun WorldInfoListScreen(
     loadWorldInfos: () -> List<WorldInfoSummary>,
+    loadBrokenCounts: (List<WorldInfoSummary>) -> Map<String, Int>,
     tick: Int,
     onBack: () -> Unit,
     onPick: (String) -> Unit,
@@ -194,6 +211,7 @@ private fun WorldInfoListScreen(
     isManageMode: Boolean
 ) {
     val worldInfos = remember(tick) { loadWorldInfos() }
+    val brokenCountByWorld = remember(tick) { loadBrokenCounts(worldInfos) }
     // 各世界书被哪些对话启用（长按对话 → 世界书设置 可自由配置，支持多本）
     val convTitlesByWorld = remember(tick) {
         val map = mutableMapOf<String, MutableList<String>>()
@@ -287,11 +305,32 @@ private fun WorldInfoListScreen(
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.world_list_entries, info.entryCount),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = stringResource(R.string.world_list_entries, info.entryCount),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                // B4：条目级禁用数量（`disable: true` 的酒馆条目导入后在此可见）
+                                if (info.disabledEntryCount > 0) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "· ${stringResource(R.string.world_list_disabled_entries, info.disabledEntryCount)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                // B26：解析失败的条目数量（编辑页会用错误态标出具体是哪几条）
+                                val brokenCount = brokenCountByWorld[info.id] ?: 0
+                                if (brokenCount > 0) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "· ${stringResource(R.string.world_list_broken_entries, brokenCount)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                             // 提示启用它的对话（长按左侧对话 → 世界书设置），一本世界书也显示
                             Spacer(Modifier.height(4.dp))
                             val titles = convTitlesByWorld[info.id] ?: emptyList()

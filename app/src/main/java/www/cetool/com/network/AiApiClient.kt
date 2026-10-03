@@ -29,11 +29,10 @@ class AiApiClient(
     private val gson = Gson()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    // D6：OkHttpClient 自带连接池与线程池，原本每个实例都新建 client、
+    // 而调用方每发一条消息都会 `AiApiClient(...)`，等于不断丢弃连接池与线程。
+    // 改成共享单例，超时差异用 newBuilder() 派生（会复用连接池与线程池）。
+    private val client by lazy { SHARED_CLIENT }
 
     private val reasoningTagRegex = Regex(
         "(<think>|<thinking>|<reason>|<reasoning>|<thought>|<\\|begin_of_thought\\|>|" +
@@ -58,6 +57,15 @@ class AiApiClient(
 
     companion object {
         private const val KEY_SESSION_ID = "zen_session_id"
+
+        /** D6：进程内共享的 OkHttpClient（连接池 / 线程池复用） */
+        private val SHARED_CLIENT: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build()
+        }
 
         /** A2：地址非法时返回的空 EventSource（无需 OkHttp 线程，也无需真实请求） */
         private val EMPTY_EVENT_SOURCE = object : EventSource {
@@ -122,7 +130,9 @@ class AiApiClient(
                     .get()
                 headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
 
-                val listClient = OkHttpClient.Builder()
+                // D6：原来这里每次都 new 一个 client 再丢掉。改为从共享实例派生，
+                // newBuilder() 会复用同一个连接池与线程池，只是覆盖超时设置。
+                val listClient = SHARED_CLIENT.newBuilder()
                     .connectTimeout(10, TimeUnit.SECONDS)
                     .readTimeout(15, TimeUnit.SECONDS)
                     .build()

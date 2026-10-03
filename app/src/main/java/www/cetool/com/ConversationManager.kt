@@ -41,7 +41,13 @@ object ConversationManager {
 
     private val lock = Any()
 
-    private val conversations = mutableListOf<Conversation>()
+    /**
+     * D8：会话列表被跨线程访问 —— SSE 线程在 `save()` 里遍历，
+     * 主线程同时可能 `createNew()` / `delete()` → `ConcurrentModificationException`
+     * 被 `save()` 的 catch 吞掉 → **静默保存失败**（数据只在内存里）。
+     * 用 CopyOnWriteArrayList 让遍历快照化，读多写少的场景也最合算。
+     */
+    private val conversations = java.util.concurrent.CopyOnWriteArrayList<Conversation>()
     private var currentIndex = 0
 
     private val activeStreams = mutableMapOf<String, EventSource>()

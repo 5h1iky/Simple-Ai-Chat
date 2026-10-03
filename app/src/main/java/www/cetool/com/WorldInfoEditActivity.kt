@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import www.cetool.com.manager.BROKEN_ENTRY_NAME
 import www.cetool.com.manager.WorldInfoManager
 import www.cetool.com.model.WorldEntry
 import www.cetool.com.model.WorldInfo
@@ -248,6 +249,7 @@ private fun WorldInfoEditScreen(
             }
 
             SectionCard(stringResource(R.string.world_edit_entries, entries.size)) {
+                val listContext = LocalContext.current
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.world_edit_entry_hint), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -261,7 +263,19 @@ private fun WorldInfoEditScreen(
                 entries.forEachIndexed { index, entry ->
                     EntryCard(
                         entry = entry,
-                        onClick = { editingIndex = index },
+                        onClick = {
+                            // B26：损坏条目不能当作真实数据编辑（写回会覆盖原始 JSON 节点），
+                            // 只允许长按删除；点按时给出提示。
+                            if (isBrokenEntry(entry)) {
+                                Toast.makeText(
+                                    listContext,
+                                    listContext.getString(R.string.world_edit_broken_not_editable),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                editingIndex = index
+                            }
+                        },
                         // B23：长按只请求删除，确认后再真正删除，避免滚动时误触
                         onLongClick = { pendingDeleteIndex = index }
                     )
@@ -273,7 +287,8 @@ private fun WorldInfoEditScreen(
     }
 
     editingIndex?.let { index ->
-        if (index in entries.indices) {
+        // B26：损坏条目永远不进编辑弹窗（写回会用哨兵字段顶掉原始 JSON 节点）
+        if (index in entries.indices && !isBrokenEntry(entries[index])) {
             EntryEditDialog(
                 entry = entries[index],
                 onDismiss = { editingIndex = null },
@@ -292,7 +307,13 @@ private fun WorldInfoEditScreen(
             title = { Text(stringResource(R.string.world_edit_delete_entry_title)) },
             text = {
                 val ctx = LocalContext.current
-                val displayName = entry?.let { entryDisplayName(ctx, it) } ?: ""
+                val displayName = if (entry == null) {
+                    ""
+                } else if (isBrokenEntry(entry)) {
+                    ctx.getString(R.string.world_edit_broken_badge)
+                } else {
+                    entryDisplayName(ctx, entry)
+                }
                 Text(stringResource(R.string.confirm_delete_msg, displayName))
             },
             confirmButton = {
@@ -317,17 +338,27 @@ private fun WorldInfoEditScreen(
 private fun entryDisplayName(context: android.content.Context, entry: WorldEntry): String =
     entry.name.trim().ifBlank { context.getString(R.string.world_edit_unnamed_entry) }
 
+/**
+ * B26：判断是否为「解析失败」的哨兵条目（WorldInfoManager.parseEntries 生成）。
+ * 哨兵条目只承载错误原因（content）与原始 JSON 节点（comment），不是真实数据。
+ */
+private fun isBrokenEntry(entry: WorldEntry): Boolean = entry.name == BROKEN_ENTRY_NAME
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () -> Unit) {
     val context = LocalContext.current
+    // B26：损坏条目用独立的错误态显示，避免用户把它当成可编辑的真实条目
+    val broken = isBrokenEntry(entry)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(12.dp),
-        // B4：条目停用 → 卡片整体压暗，和启用条目区分开
-        color = if (entry.enabled) {
+        color = if (broken) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        } else if (entry.enabled) {
+            // B4：条目停用 → 卡片整体压暗，和启用条目区分开
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)
@@ -336,40 +367,60 @@ private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () ->
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = entryDisplayName(context, entry),
+                    text = if (broken) {
+                        context.getString(R.string.world_edit_broken_badge)
+                    } else {
+                        entryDisplayName(context, entry)
+                    },
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    color = if (broken) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = context.getString(R.string.world_edit_entry_meta, positionLabel(context, entry.position), entry.priority),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (!broken) {
+                    Text(
+                        text = context.getString(R.string.world_edit_entry_meta, positionLabel(context, entry.position), entry.priority),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            // B4：停用条目标识（酒馆 disable:true 导入的条目此前无处可见）
-            if (!entry.enabled) {
+            if (broken) {
+                // 失败原因写在 content 里，告诉用户原始数据仍会保留
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = context.getString(R.string.world_edit_disabled_badge),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = context.getString(
+                        R.string.world_edit_broken_note,
+                        entry.content.ifBlank { BROKEN_ENTRY_NAME }
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
-            }
-            if (entry.keywords.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                TagRow(tags = entry.keywords.take(6))
-            }
-            if (entry.content.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = entry.content,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+            } else {
+                // B4：停用条目标识（酒馆 disable:true 导入的条目此前无处可见）
+                if (!entry.enabled) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = context.getString(R.string.world_edit_disabled_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (entry.keywords.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    TagRow(tags = entry.keywords.take(6))
+                }
+                if (entry.content.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = entry.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

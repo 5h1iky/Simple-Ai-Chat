@@ -85,13 +85,17 @@ object CharacterManager {
         }
 
         if (result is WorldInfoImporter.ImportResult.Success && result.info.entries.isNotEmpty()) {
-            val wid = WorldInfoManager.saveNew(context, result.info)
+            // C3：重复导入同一张卡原本会重复建一本一模一样的书
+            val existingId = card.data.character_book?.let { dedupeEmbeddedBook(context, it) }
+            val wid = existingId ?: WorldInfoManager.saveNew(context, result.info)
             val newExtensions = card.data.extensions.toMutableMap()
-            newExtensions["sachat_worldbook_id"] = com.google.gson.JsonPrimitive(wid)
+            newExtensions[SACHAT_WORLDBOOK_ID] = com.google.gson.JsonPrimitive(wid)
             return card.copy(data = card.data.copy(extensions = newExtensions))
         }
         return card
     }
+
+    private const val SACHAT_WORLDBOOK_ID = "sachat_worldbook_id"
 
     fun overwrite(context: Context, characterId: String, json: String): Boolean {
         val file = File(getDir(context), "$characterId.json")
@@ -100,8 +104,39 @@ object CharacterManager {
     }
 
     fun delete(context: Context, characterId: String) {
-        val file = File(getDir(context), "$characterId.json")
-        if (file.exists()) file.delete()
+        // C3：必须在删掉卡片文件之前读出其关联的内嵌书 id
+        val embeddedBookId = loadCard(context, characterId)?.data
+            ?.extensions?.get(SACHAT_WORLDBOOK_ID)
+            ?.takeIf { it.isJsonPrimitive }?.asString
+
+        File(getDir(context), "$characterId.json").delete()
+
+        // C3：删卡不删它创建的内嵌世界书 → 该书永远留在世界书列表里成为孤儿
+        if (!embeddedBookId.isNullOrBlank()) {
+            WorldInfoManager.delete(context, embeddedBookId)
+        }
+    }
+
+    /**
+     * C3：重复导入同一张卡会重复建书。这里在 `save` 前做去重：
+     * 若已存在「同源且内容相同」的内嵌书，直接复用它的 id 而不是新建一本。
+     */
+    private fun dedupeEmbeddedBook(context: Context, book: www.cetool.com.model.CharacterBook): String? {
+        val pending = WorldInfoImporter.parseCharacterBook(book, "").let { result ->
+            if (result is WorldInfoImporter.ImportResult.Success) result.info else null
+        } ?: return null
+        val signature = pending.entries.sortedBy { it.name }
+            .joinToString("|") { "${it.name}::${it.content}" }
+        if (signature.isBlank()) return null
+
+        return WorldInfoManager.list(context).firstOrNull { summary ->
+            summary.entryCount == pending.entries.size &&
+                run {
+                    val existing = WorldInfoManager.load(context, summary.id) ?: return@run false
+                    existing.entries.sortedBy { it.name }
+                        .joinToString("|") { "${it.name}::${it.content}" } == signature
+                }
+        }?.id
     }
 
     fun assembleSystemPrompt(card: TavernCard): String {

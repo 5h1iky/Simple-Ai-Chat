@@ -20,13 +20,45 @@ object LocaleHelper {
             ?: SettingsKeys.LANGUAGE_SYSTEM
     }
 
+    /**
+     * E9：进程启动时抓取的「系统 locale」快照。
+     *
+     * `apply()` 会调用 `Locale.setDefault(...)` **覆盖全局默认 locale**，
+     * 于是切到 zh/en 之后，`resolveLocale()` 里拿到的 `Locale.getDefault()`
+     * 已经是被我们自己改过的值 —— 用户在进程存活期间再切回"跟随系统"时，
+     * 得到的其实是上一次手动设置的语言，而不是真正的系统语言。
+     */
+    @Volatile
+    private var systemLocaleSnapshot: Locale? = null
+
+    /** 进程内记录一次原始系统 locale（只记录第一次） */
+    private fun systemLocale(): Locale {
+        systemLocaleSnapshot?.let { return it }
+        synchronized(this) {
+            systemLocaleSnapshot?.let { return it }
+            val snapshot = Locale.getDefault()
+            systemLocaleSnapshot = snapshot
+            return snapshot
+        }
+    }
+
     fun resolveLocale(pref: String): Locale {
         return when (pref) {
             SettingsKeys.LANGUAGE_ZH -> Locale.SIMPLIFIED_CHINESE
             SettingsKeys.LANGUAGE_EN -> Locale.ENGLISH
-            // 跟随系统：直接用系统默认 locale
-            else -> Locale.getDefault()
+            // 跟随系统：用进程启动时快照下来的系统 locale。
+            // E9：不能用 Locale.getDefault() —— apply() 已经把它覆盖掉了，
+            // 那样"跟随系统"在进程存活期间永远无法恢复。
+            else -> systemLocale()
         }
+    }
+
+    /**
+     * 进程启动时先落一次快照，必须在任何 apply() 之前调用。
+     * Application.attachBaseContext 是唯一可靠的时机。
+     */
+    fun captureSystemLocale() {
+        systemLocale()
     }
 
     /** attachBaseContext 中调用：按偏好包装 Context 并同步全局默认 locale */

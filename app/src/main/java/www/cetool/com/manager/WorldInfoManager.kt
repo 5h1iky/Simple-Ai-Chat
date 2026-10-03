@@ -68,10 +68,79 @@ object WorldInfoManager {
         } catch (_: Exception) { null }
     }
 
-    /** 读取世界书原始 JSON（导出用） */
+    /** 读取世界书原始 JSON（**自有格式**，仅供内部搬运） */
     fun rawJson(context: Context, id: String): String? {
         val file = File(getDir(context), "$id.json")
-        return if (file.exists()) try { file.readText() } catch (_: Exception) { null } else null
+        return if (file.exists()) www.cetool.com.util.SafeFiles.readText(file) else null
+    }
+
+    /**
+     * B27：导出为**酒馆 SillyTavern 标准世界书**格式。
+     *
+     * `buildJson` 写出的是 `{version, type:"lorebook", data:{..., entries:[...]}}`
+     * （数组 + camelCase 字段），而酒馆世界书是 `{entries:{uid:{keys:[...], insertion_order:...}}}`
+     * （**对象**包条目 + snake_case）。编辑一次后再导入酒馆会失败/丢键。
+     *
+     * 这里做真正的格式转换，让导出的文件能被酒馆直接导入。
+     */
+    fun exportSillyTavern(context: Context, id: String): String? {
+        val info = load(context, id) ?: return null
+        val root = com.google.gson.JsonObject()
+        root.addProperty("name", info.name)
+        if (info.description.isNotBlank()) root.addProperty("description", info.description)
+
+        val entries = com.google.gson.JsonObject()
+        info.entries.forEachIndexed { index, e ->
+            val obj = com.google.gson.JsonObject()
+
+            val keys = com.google.gson.JsonArray()
+            e.keywords.forEach { keys.add(it) }
+            obj.add("keys", keys)
+
+            if (e.secondaryKeys.isNotEmpty()) {
+                val secondary = com.google.gson.JsonArray()
+                e.secondaryKeys.forEach { secondary.add(it) }
+                obj.add("secondary_keys", secondary)
+            }
+
+            obj.addProperty("content", e.content)
+            if (e.comment.isNotBlank()) obj.addProperty("comment", e.comment)
+            obj.addProperty("constant", e.constantActive)
+            obj.addProperty("selective", e.selective)
+            obj.addProperty("selectiveLogic", e.selectiveLogic)
+            obj.addProperty("order", index)
+            obj.addProperty("insertion_order", e.priority)
+            obj.addProperty("enabled", e.enabled)
+            obj.addProperty("position", stPositionFor(e))
+
+            val ext = com.google.gson.JsonObject()
+            ext.addProperty("position", stPositionFor(e))
+            ext.addProperty("depth", e.injectDepth)
+            ext.addProperty("scan_depth", e.scanDepth)
+            ext.addProperty("probability", e.probability)
+            ext.addProperty("useProbability", e.useProbability)
+            ext.addProperty("use_regex", e.useRegex)
+            ext.addProperty("match_whole_words", e.wholeWords)
+            ext.addProperty("case_sensitive", e.caseSensitive)
+            obj.add("extensions", ext)
+
+            entries.add(index.toString(), obj)
+        }
+        root.add("entries", entries)
+        return com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(root)
+    }
+
+    /** 本项目位置字符串 → 酒馆 position 编号（与 WorldInfoImporter.ST_POSITION_MAP 互为逆操作） */
+    private fun stPositionFor(e: WorldEntry): Int {
+        if (e.stPosition >= 0) return e.stPosition
+        return when (e.position) {
+            "before_char_defs" -> 0
+            "before_example_messages" -> 2
+            "after_example_messages" -> 3
+            "at_depth" -> 4
+            "outlet" -> 7
+            else -> 1 // after_char_defs / after_system_prompt
+        }
     }
 
     private fun parseEntries(data: com.google.gson.JsonObject): MutableList<WorldEntry> {

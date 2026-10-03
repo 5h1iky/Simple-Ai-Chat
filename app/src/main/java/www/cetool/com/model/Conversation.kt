@@ -9,7 +9,13 @@ import java.util.UUID
 data class Conversation(
     val id: String = UUID.randomUUID().toString(),
     var title: String = DEFAULT_TITLE,
-    val messages: MutableList<Message> = mutableListOf(),
+    /**
+     * D8：消息列表被跨线程读写 —— SSE（OkHttp）线程在 onText/onReasoning 里
+     * `messages[lastIndex] = updated`，主线程同时可能 `toList()` / `removeAt()`。
+     * 用 CopyOnWriteArrayList 让读操作不加锁且遍历不会被并发修改打断
+     * （消息数远小于读次数：每个流式分片都会触发一次 UI 侧 toList）。
+     */
+    val messages: MutableList<Message> = java.util.concurrent.CopyOnWriteArrayList(),
     var systemPrompt: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),

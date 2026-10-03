@@ -664,7 +664,14 @@ private fun AttachmentViewerDialog(
     )
 }
 
-/** Markdown 渲染：复用 Markwon（AndroidView 包装） */
+/**
+ * Markdown 渲染：复用 Markwon（AndroidView 包装）。
+ *
+ * D5：原本每个气泡都 `remember { Markwon.builder(...).build() }` —— N 条消息就是 N 个
+ * Markwon 实例（各自带插件表与缓存），是列表滚动卡顿的主要来源。
+ * 改为进程内的每 context 共享一个实例：这样既不依赖 CompositionLocal 的提供时机，
+ * 又避免了组合 ts——每条消息仍在自己的 AndroidView 里渲染，只是不再各自建解析器。
+ */
 @Composable
 fun ChatMarkdown(
     text: String,
@@ -672,7 +679,7 @@ fun ChatMarkdown(
     textColor: androidx.compose.ui.graphics.Color? = null
 ) {
     val context = LocalContext.current
-    val markwon = remember { Markwon.builder(context).usePlugin(www.cetool.com.NoItalicPlugin()).build() }
+    val markwon = remember(context) { www.cetool.com.util.MarkwonProvider.get(context) }
     AndroidView(
         factory = { ctx -> TextView(ctx) },
         update = { tv ->

@@ -71,22 +71,40 @@ class BondActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 聚合：按角色分组封存过的会话（组合外计算一次）
-        val bonds = ConversationManager.all
-            .filter { it.isArchived && it.characterId != null }
-            .groupBy { it.characterId!! }
-            .mapNotNull { (characterId, convs) ->
-                val card = CharacterManager.loadCard(this, characterId) ?: return@mapNotNull null
-                BondCharacter(
-                    characterId = characterId,
-                    name = card.data.name,
-                    avatarBase64 = card.avatarBase64,
-                    fields = card.data.getCharacterFields(),
-                    archivedAt = convs.maxOf { it.updatedAt },
-                    sessionCount = convs.size
+        // E12：ConversationManager 不是由 Application 调用的；BondActivity 作为独立入口
+        // 从未 init 过 —— 进程被回收后从这里恢复会显示「空列表」（无崩溃）。
+        ConversationManager.init(this)
+
+        val bondsState = mutableStateOf<List<BondCharacter>>(emptyList())
+
+        // D4：原来在 onCreate 主线程里对每个封存角色逐个 loadCard（读文件 + JSON 解析，
+        // 还含 base64 头像），卡片多了会明显卡住首帧。改为后台线程聚合并发布结果。
+        val activity = this
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        executor.execute {
+            // 注意：这里是 Runnable 的 lambda，不能再用 return@mapNotNull（会穿越到外层），
+            // 所以改为显式循环。
+            val result = mutableListOf<BondCharacter>()
+            val grouped = ConversationManager.all
+                .filter { it.isArchived && it.characterId != null }
+                .groupBy { it.characterId!! }
+            for ((characterId, convs) in grouped) {
+                val card = CharacterManager.loadCard(activity, characterId) ?: continue
+                result.add(
+                    BondCharacter(
+                        characterId = characterId,
+                        name = card.data.name,
+                        avatarBase64 = card.avatarBase64,
+                        fields = card.data.getCharacterFields(),
+                        archivedAt = convs.maxOf { it.updatedAt },
+                        sessionCount = convs.size
+                    )
                 )
             }
-            .sortedByDescending { it.archivedAt }
+            val sorted = result.sortedByDescending { it.archivedAt }
+            runOnUiThread { bondsState.value = sorted }
+            executor.shutdown()
+        }
 
         var selected by mutableStateOf<BondCharacter?>(null)
 
@@ -94,7 +112,7 @@ class BondActivity : ComponentActivity() {
             SAChatTheme {
                 if (selected == null) {
                     BondListScreen(
-                        bonds = bonds,
+                        bonds = bondsState.value,
                         onBack = { finish() },
                         onSelect = { selected = it }
                     )
