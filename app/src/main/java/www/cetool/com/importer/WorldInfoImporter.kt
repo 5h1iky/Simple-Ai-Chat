@@ -235,7 +235,10 @@ object WorldInfoImporter {
 
         val content = str(entry.get("content")) ?: ""
         val comment = str(entry.get("comment")) ?: ""
-        val name = comment.ifBlank { keywords.firstOrNull() ?: "未命名条目" }
+        // 往返完整性：本项目的导出器会额外写一个 `name` 字段（WorldEntry 的 name 与
+        // comment 是两个独立字段，而酒馆格式只有 comment）。优先用它，否则回落 comment。
+        val name = str(entry.get("name"))?.takeIf { it.isNotBlank() }
+            ?: comment.ifBlank { keywords.firstOrNull() ?: "未命名条目" }
 
         // 跳过完全空白的条目（无内容且无关键词且无常驻）
         if (content.isBlank() && keywords.isEmpty() && !bool(entry.get("constant"), false)) {

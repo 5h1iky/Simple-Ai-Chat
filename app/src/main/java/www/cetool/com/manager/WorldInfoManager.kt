@@ -75,119 +75,13 @@ object WorldInfoManager {
     }
 
     /**
-     * B27：导出为**酒馆 SillyTavern 标准世界书**格式。
-     *
-     * `buildJson` 写出的是 `{version, type:"lorebook", data:{..., entries:[...]}}`
-     * （数组 + camelCase 字段），而酒馆世界书是 `{entries:{uid:{keys:[...], insertion_order:...}}}`
-     * （**对象**包条目 + snake_case）。编辑一次后再导入酒馆会失败/丢键。
-     *
-     * 这里做真正的格式转换，让导出的文件能被酒馆直接导入。
+     * B27：导出为**酒馆 SillyTavern 标准世界书**格式（委托给纯函数实现，
+     * 便于脱离 Android 做往返一致性验证）。
      */
     fun exportSillyTavern(context: Context, id: String): String? {
         val info = load(context, id) ?: return null
-        val root = com.google.gson.JsonObject()
-        root.addProperty("name", info.name)
-        if (info.description.isNotBlank()) root.addProperty("description", info.description)
-
-        val entries = com.google.gson.JsonObject()
-        info.entries.forEachIndexed { index, e ->
-            val obj = com.google.gson.JsonObject()
-            val pos = stPositionFor(e)
-
-            val keys = com.google.gson.JsonArray()
-            e.keywords.forEach { keys.add(it) }
-            obj.add("keys", keys)
-
-            if (e.secondaryKeys.isNotEmpty()) {
-                val secondary = com.google.gson.JsonArray()
-                e.secondaryKeys.forEach { secondary.add(it) }
-                obj.add("secondary_keys", secondary)
-            }
-
-            obj.addProperty("content", e.content)
-            if (e.comment.isNotBlank()) obj.addProperty("comment", e.comment)
-            obj.addProperty("constant", e.constantActive)
-            obj.addProperty("selective", e.selective)
-            obj.addProperty("selectiveLogic", e.selectiveLogic)
-            // M6：`order` 与 `insertion_order` 都必须写 priority。
-            // 原来 order 写的是数组下标，而酒馆读 order → 条目顺序变成文件里的位置，
-            // 用户设置的 priority 在往返后失效。
-            obj.addProperty("order", e.priority)
-            obj.addProperty("insertion_order", e.priority)
-            obj.addProperty("enabled", e.enabled)
-            obj.addProperty("disable", !e.enabled)
-            obj.addProperty("position", pos)
-            obj.addProperty("probability", e.probability)
-            obj.addProperty("useProbability", e.useProbability)
-            obj.addProperty("score", e.score)
-            // M6：正则标志必须写在**顶层** —— 本项目的导入器只读顶层 useRegex
-            //（酒馆自身则放在 extensions.use_regex，两处都写以同时满足）
-            obj.addProperty("useRegex", e.useRegex)
-            // M6：分组字段此前完全没导出，导致刚实现的 B31 分组在往返后丢失
-            if (e.groupName.isNotBlank()) obj.addProperty("group", e.groupName)
-            if (e.triggers.isNotEmpty()) {
-                val triggers = com.google.gson.JsonArray()
-                e.triggers.forEach { triggers.add(it) }
-                obj.add("triggers", triggers)
-            }
-
-            val ext = com.google.gson.JsonObject()
-            ext.addProperty("position", pos)
-            ext.addProperty("depth", e.injectDepth)
-            ext.addProperty("scan_depth", e.scanDepth)
-            ext.addProperty("probability", e.probability)
-            ext.addProperty("useProbability", e.useProbability)
-            ext.addProperty("use_regex", e.useRegex)
-            ext.addProperty("match_whole_words", e.wholeWords)
-            ext.addProperty("case_sensitive", e.caseSensitive)
-            // M6：以下字段此前全部没有导出，导出后再导回本应用即静默丢失
-            ext.addProperty("group_weight", e.groupWeight)
-            ext.addProperty("exclude_recursion", e.excludeRecursion)
-            ext.addProperty("prevent_recursion", e.preventRecursion)
-            ext.addProperty("delay_until_recursion", e.delayUntilRecursion)
-            ext.addProperty("automation_id", e.automationId)
-            ext.addProperty("sticky", e.sticky)
-            ext.addProperty("cooldown", e.cooldown)
-            ext.addProperty("delay", e.delay)
-            ext.addProperty("display_index", e.displayIndex)
-            ext.addProperty("vectorized", e.vectorized)
-            e.injectRole?.let { ext.addProperty("role", it) }
-            obj.add("extensions", ext)
-
-            entries.add(index.toString(), obj)
-        }
-        root.add("entries", entries)
-        return com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(root)
+        return SillyTavernExporter.toJson(info)
     }
-
-    /**
-     * 本项目位置字符串 → 酒馆 position 编号。
-     *
-     * M6：优先按**当前** `position` 映射 —— `stPosition` 是导入时的原始编号，
-     * 而条目编辑器只更新 `position`、从不改 `stPosition`，
-     * 因此原实现会让「界面上改过的注入位置」在导出时被静默回退。
-     *
-     * 例外：当原始编号映射到的槽位与当前 position 一致时，保留原始编号
-     *（例如酒馆的 5=EMTop 与 2=ANTop 在本项目里是同一个槽位，
-     * 用户没动过位置就应该原样导出，而不是被压成 2）。
-     */
-    private fun stPositionFor(e: WorldEntry): Int {
-        val mapped = when (e.position) {
-            "before_char_defs" -> 0
-            "before_example_messages" -> 2
-            "after_example_messages" -> 3
-            "at_depth" -> 4
-            "outlet" -> 7
-            else -> 1 // after_char_defs / after_system_prompt
-        }
-        if (e.stPosition >= 0 && ST_SLOT_OF[e.stPosition] == mapped) return e.stPosition
-        return mapped
-    }
-
-    /** 酒馆 position 编号 → 本项目位置槽位（与 WorldInfoImporter.ST_POSITION_MAP 同义，用槽位号比较） */
-    private val ST_SLOT_OF = mapOf(
-        0 to 0, 1 to 1, 2 to 2, 3 to 3, 4 to 4, 5 to 2, 6 to 3, 7 to 7
-    )
 
     private fun parseEntries(data: com.google.gson.JsonObject): MutableList<WorldEntry> {
         val entries = mutableListOf<WorldEntry>()
