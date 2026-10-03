@@ -50,10 +50,12 @@ object TavernCardImporter {
         // 带 entries 的是世界书，不是角色卡（顶层）。
         // 否则「有 name + description」的世界书会被下面的 v1 分支误判为角色卡，
         // 随后在 save 阶段报出误导性的「保存失败」。
-        // 注意用 get()?.isJsonNull 判存在 —— has() 对显式的 `"entries": null` 也返回 true，
-        // 那会把这种文件误判成世界书。
-        if (root.get("entries")?.isJsonNull == false) {
-            throw IllegalArgumentException("这看起来是世界书文件，不是角色卡")
+        //
+        // 这里用 `has` 而不是 `?.isJsonNull == false`：`"entries": null` 是**损坏的世界书**，
+        // 语义上仍然更像世界书。角色卡导入入口允许任意 MIME，用户选错文件很常见，
+        // 此时给出明确错误远比静默造出一张垃圾卡好。
+        if (root.has("entries")) {
+            throw IllegalArgumentException("这看起来是世界书文件（含 entries 字段），不是角色卡")
         }
 
         // 只有真正的 JSON 对象才算 data；`"data": null` 会被 Gson 表示成 JsonNull，
@@ -114,15 +116,16 @@ object TavernCardImporter {
         root: com.google.gson.JsonObject,
         dataObj: com.google.gson.JsonObject
     ): Boolean {
-        if (dataObj.get("entries")?.isJsonNull == false) return true
+        // 同样用 has：data.entries 存在（哪怕值为 null）就按世界书拒绝
+        if (dataObj.has("entries")) return true
         val type = root.get("type")?.takeIf { it.isJsonPrimitive }?.asString
         if (type == "lorebook") return true
         val schema = root.get("schema")?.takeIf { it.isJsonPrimitive }?.asString
         if (schema != null && schema.startsWith("museai.")) return true
-        // 世界书的标志性字段：data 里有 id+description+enabled 但没有角色卡字段
+        // 世界书的标志性字段：data 里有 id+enabled 但没有角色卡字段
         val hasCardField = dataObj.has("first_mes") || dataObj.has("personality") ||
             dataObj.has("mes_example") || dataObj.has("alternate_greetings")
-        val hasBookField = dataObj.has("entries") || (dataObj.has("id") && dataObj.has("enabled"))
+        val hasBookField = dataObj.has("id") && dataObj.has("enabled")
         return hasBookField && !hasCardField
     }
 
