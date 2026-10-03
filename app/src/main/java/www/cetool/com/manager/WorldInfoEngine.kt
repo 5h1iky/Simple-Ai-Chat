@@ -90,11 +90,16 @@ object WorldInfoEngine {
             }
         }
 
-        // 再按原始命中顺序输出：未分组的全留，分组的只留胜者（每组一次）
-        val emittedGroups = HashSet<String>()
+        // 再按原始命中顺序输出：未分组的全留，分组的**只留胜者**。
+        //
+        // M2：这里绝不能再用「已发射组」集合做去重 —— 曾经写成
+        // `emittedGroups.add(group) && bestOfGroup[group] === entry`，
+        // 而 `add()` 对**落选条目**同样返回 true 并留下副作用（把组标记成已发射），
+        // 于是后面真正的胜者被短路掉 → 该组一条都不注入（比不分组还糟）。
+        // 胜者在 `hits` 里只出现一次（每个条目实例唯一），因此按身份过滤即可。
         return hits.filter { entry ->
             val group = entry.groupName.trim()
-            if (group.isBlank()) true else emittedGroups.add(group) && bestOfGroup[group] === entry
+            group.isBlank() || bestOfGroup[group] === entry
         }
     }
 
@@ -166,8 +171,13 @@ object WorldInfoEngine {
         entries: List<WorldEntry>,
         maxTokens: Int = DEFAULT_BUDGET
     ): List<WorldEntry> {
-        val constants = entries.filter { it.constantActive }.sortedBy { it.priority }
-        val others = entries.filter { !it.constantActive }.sortedBy { it.priority }
+        // m4 / B2：outlet 条目从不自动注入（只由 {{outlet::名称}} 手动拉取），
+        // buildInjection 会把它丢掉 —— 但它此前照常参与预算累加，
+        // 一条大 outlet 条目会把真正要注入的条目挤掉。这里直接排除在预算之外。
+        val injectable = entries.filter { it.position != "outlet" }
+
+        val constants = injectable.filter { it.constantActive }.sortedBy { it.priority }
+        val others = injectable.filter { !it.constantActive }.sortedBy { it.priority }
         val ordered = constants + others
 
         val result = mutableListOf<WorldEntry>()

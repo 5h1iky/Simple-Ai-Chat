@@ -90,7 +90,11 @@ data class TavernCardData(
 
     private companion object {
         const val FIELDS_KEY = "sachat_fields"
-        val gson = Gson()
+        // C2：卡文件里写成 "sachat_fields": {"identityTags": null} 时，
+        // 裸 Gson 会把非空的 MutableList 属性置为 null →
+        // CharacterInfo(tags = null) 抛 NPE → 被 CharacterManager.list 的
+        // catch 吞掉 → **卡片从列表静默消失**（正是 C2 的症状）。
+        val gson = www.cetool.com.util.NullSafeTypeAdapterFactory.buildGson()
     }
 
     /** 读取结构化字段（无则返回全空对象） */

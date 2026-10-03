@@ -71,30 +71,40 @@ data class WorldEntry(
 
     fun matches(text: String): Boolean {
         if (!enabled) return false
-        val compareText = if (caseSensitive) text else text.lowercase()
         return keywords.usableKeywords().any { rawKw ->
-            val keyword = if (caseSensitive) rawKw else rawKw.lowercase()
-            matchOne(keyword, compareText)
+            matchOne(normalizeKeyword(rawKw), text)
         }
     }
 
     /** 次级关键词是否命中（与主键同规则） */
     fun matchesSecondary(text: String): Boolean {
         if (secondaryKeys.isEmpty()) return false
-        val compareText = if (caseSensitive) text else text.lowercase()
         return secondaryKeys.usableKeywords().any { rawKw ->
-            val keyword = if (caseSensitive) rawKw else rawKw.lowercase()
-            matchOne(keyword, text, compareText)
+            matchOne(normalizeKeyword(rawKw), text)
         }
     }
 
-    /** 单条关键词匹配：正则 / 整词边界 / 子串，三种模式共用一条实现 */
-    private fun matchOne(keyword: String, compareText: String, rawText: String = compareText): Boolean {
+    private fun normalizeKeyword(raw: String): String =
+        if (caseSensitive) raw else raw.lowercase()
+
+    /**
+     * 单条关键词匹配：正则 / 整词边界 / 子串，三种模式共用一条实现。
+     *
+     * 只接收 (关键词, 原文) 两个参数，大小写处理在内部完成 ——
+     * 早先的版本额外暴露了一个「已归一化文本」参数，导致两处调用点参数写反：
+     * `matchesSecondary` 把原文当成了归一化文本，于是 caseSensitive=false 时
+     * 整词/子串分支实际区分大小写（"Magic Missile" 匹配不到 "magic"）。
+     * 去掉该参数即可从结构上杜绝这类错误。
+     *
+     * @param keyword 已按 caseSensitive 归一化
+     */
+    private fun matchOne(keyword: String, text: String): Boolean {
+        val compareText = if (caseSensitive) text else text.lowercase()
+
         if (useRegex) {
             return try {
-                val target = if (caseSensitive) rawText else rawText.lowercase()
                 val regex = if (caseSensitive) Regex(keyword) else Regex(keyword, RegexOption.IGNORE_CASE)
-                regex.containsMatchIn(target)
+                regex.containsMatchIn(text)
             } catch (_: Exception) { false }
         }
         if (wholeWords && keyword.isNotBlank() && !keyword.contains(' ') && !containsCjk(keyword)) {

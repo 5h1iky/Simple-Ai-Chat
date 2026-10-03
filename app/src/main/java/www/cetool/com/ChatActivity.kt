@@ -1504,6 +1504,10 @@ class ChatActivity : ComponentActivity() {
             confirmButton = {
                 TextButton(onClick = {
                     actionConv?.let { conv ->
+                        // D8/M3：清空会与 SSE 线程的 `messages[lastIndex] = ...` 并发。
+                        // COW 列表保证不会损坏内存，但仍应先取消该会话进行中的流，
+                        // 否则回调会继续往已清空的列表里写字（分片静默丢失）。
+                        ConversationManager.cancelStream(conv.id)
                         conv.messages.clear()
                         ConversationManager.save()
                         if (conv.id == currentConversation?.id) {

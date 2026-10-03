@@ -54,16 +54,34 @@ class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // E11 / m1：崩溃日志必须在**组合之前、主线程之外的时机**读一次，
+        // 且只读到内存里 —— 原实现在组合期 `remember { getCrashLog(...) }` 读盘，
+        // 并在用户点按之前就 clearCrashLog：转屏或进程被杀即永久丢失报告，
+        // 而且空文件时 readText 返回 ""（非 null）会让弹窗显示一份空报告。
+        val crashLogState = androidx.compose.runtime.mutableStateOf<String?>(null)
+        val crashLogLoaded = androidx.compose.runtime.mutableStateOf(false)
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        executor.execute {
+            val log = CrashReporter.getCrashLog(this)?.takeIf { it.isNotBlank() }
+            runOnUiThread {
+                crashLogState.value = log
+                crashLogLoaded.value = true
+            }
+            executor.shutdown()
+        }
+
         setContent {
             SAChatTheme {
                 var text by remember { mutableStateOf("") }
                 var showCrash by remember { mutableStateOf(false) }
-                val crashLog = remember { CrashReporter.getCrashLog(this@SplashActivity) }
+                val crashLog = crashLogState.value
+                val loaded = crashLogLoaded.value
 
-                LaunchedEffect(Unit) {
+                LaunchedEffect(loaded, crashLog) {
+                    if (!loaded) return@LaunchedEffect   // 还在后台读取，先什么都不做
                     if (crashLog != null) {
-                        CrashReporter.clearCrashLog(this@SplashActivity)
-                        showCrash = true
+                        showCrash = true                  // 清除推迟到用户处理之后
                     } else {
                         playAnimation { text = it }
                     }
@@ -91,12 +109,17 @@ class SplashActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 CrashReporter.copyAndReport(this@SplashActivity, crashLog ?: "")
+                                // m1：用户已处理，这时才清除（原实现在展示前就删，
+                                // 转屏/被杀会让报告永久丢失）
+                                CrashReporter.clearCrashLog(this@SplashActivity)
                                 showCrash = false
                                 lifecycleScope.launch { playAnimation { text = it } }
                             }) { Text(stringResource(R.string.splash_crash_copy)) }
                         },
                         dismissButton = {
                             TextButton(onClick = {
+                                // 用户选择忽略 → 同样在此时才丢弃
+                                CrashReporter.clearCrashLog(this@SplashActivity)
                                 showCrash = false
                                 lifecycleScope.launch { playAnimation { text = it } }
                             }) { Text(stringResource(R.string.splash_crash_ignore)) }

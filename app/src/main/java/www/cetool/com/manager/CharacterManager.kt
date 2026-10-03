@@ -114,15 +114,62 @@ object CharacterManager {
 
         File(getDir(context), "$characterId.json").delete()
 
-        // C3：删卡不删它创建的内嵌世界书 → 该书永远留在世界书列表里成为孤儿
-        if (!embeddedBookId.isNullOrBlank()) {
+        // C3：删卡不删它创建的内嵌世界书 → 该书永远留在世界书列表里成为孤儿。
+        //
+        // M7：但 dedupeEmbeddedBook 会让「两张内嵌同一本书的卡」共用同一个书 id
+        //（同卡重复导入、或两张卡带同一份 character_book）。若无脑删除，
+        // 删掉其中一张卡就会把另一张卡仍在用的书删掉，那张卡的 lore 静默失效。
+        // 因此先确认没有**其他**角色卡仍引用这本书，再删。
+        if (!embeddedBookId.isNullOrBlank() && !isBookReferencedByOtherCard(context, embeddedBookId, characterId)) {
             WorldInfoManager.delete(context, embeddedBookId)
         }
+    }
+
+    /** M7：所有角色卡当前引用的内嵌世界书 id 集合 */
+    private fun allCardBookIds(context: Context): Set<String> {
+        val dir = getDir(context)
+        return dir.listFiles()
+            ?.filter { it.extension == "json" }
+            ?.mapNotNull { file ->
+                try {
+                    TavernCardImporter.parse(www.cetool.com.util.SafeFiles.readText(file) ?: return@mapNotNull null)
+                        .getOrNull()?.data?.extensions?.get(SACHAT_WORLDBOOK_ID)
+                        ?.takeIf { it.isJsonPrimitive }?.asString
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            ?.toSet()
+            ?: emptySet()
+    }
+
+    /** M7：除 excludeCharacterId 外，是否还有角色卡引用该世界书 */
+    private fun isBookReferencedByOtherCard(
+        context: Context,
+        bookId: String,
+        excludeCharacterId: String
+    ): Boolean {
+        val dir = getDir(context)
+        return dir.listFiles()
+            ?.filter { it.extension == "json" && it.nameWithoutExtension != excludeCharacterId }
+            ?.any { file ->
+                val card = try {
+                    TavernCardImporter.parse(www.cetool.com.util.SafeFiles.readText(file) ?: return@any false)
+                        .getOrNull()
+                } catch (_: Exception) {
+                    null
+                }
+                card?.data?.extensions?.get(SACHAT_WORLDBOOK_ID)
+                    ?.takeIf { it.isJsonPrimitive }?.asString == bookId
+            } ?: false
     }
 
     /**
      * C3：重复导入同一张卡会重复建书。这里在 `save` 前做去重：
      * 若已存在「同源且内容相同」的内嵌书，直接复用它的 id 而不是新建一本。
+     *
+     * M7：候选只接受**已被某张角色卡引用**的书。否则用户手工建的一本同内容世界书
+     * 会被"认领"为这张卡的内嵌书，随后删卡时把用户的书一起删掉。
      */
     private fun dedupeEmbeddedBook(context: Context, book: www.cetool.com.model.CharacterBook): String? {
         val pending = WorldInfoImporter.parseCharacterBook(book, "").let { result ->
@@ -132,8 +179,11 @@ object CharacterManager {
             .joinToString("|") { "${it.name}::${it.content}" }
         if (signature.isBlank()) return null
 
+        val cardOwnedBookIds = allCardBookIds(context)
+
         return WorldInfoManager.list(context).firstOrNull { summary ->
-            summary.entryCount == pending.entries.size &&
+            summary.id in cardOwnedBookIds &&
+                summary.entryCount == pending.entries.size &&
                 run {
                     val existing = WorldInfoManager.load(context, summary.id) ?: return@run false
                     existing.entries.sortedBy { it.name }

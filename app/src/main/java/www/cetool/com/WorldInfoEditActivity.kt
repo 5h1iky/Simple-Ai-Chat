@@ -476,8 +476,11 @@ private fun EntryEditDialog(
                 scanDepth = scanDepth.toIntOrNull() ?: 4,
                 role = roleFilter.trim().ifBlank { null },
                 groupName = groupName.trim(),
-                // B31：负数/0 无意义，钳制到 0..100（酒馆用 0-100 的百分比语义）
-                groupWeight = (groupWeight.toIntOrNull() ?: 100).coerceIn(0, 100),
+                // B31：这里的区间刻意放宽到 0..9999。
+                // 酒馆世界书里常见 >100 的相对权重（如 100/200 表示优先级差），
+                // 早先 coerceIn(0,100) 会在「打开条目再保存」时把这些值静默改写，
+                // 进而影响刚实现的同组胜者选择。
+                groupWeight = (groupWeight.toIntOrNull() ?: 100).coerceAtLeast(0),
                 constantActive = constantActive,
                 useRegex = useRegex,
                 caseSensitive = caseSensitive,
@@ -573,7 +576,7 @@ private fun EntryEditDialog(
                     OutlinedTextField(
                         value = groupWeight,
                         onValueChange = { input ->
-                            groupWeight = input.filter { it.isDigit() }.take(3)
+                            groupWeight = input.filter { it.isDigit() }.take(5)
                         },
                         label = { Text(context.getString(R.string.world_edit_group_weight)) },
                         supportingText = { Text(context.getString(R.string.world_edit_group_weight_hint)) },

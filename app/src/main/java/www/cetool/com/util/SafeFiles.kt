@@ -26,12 +26,20 @@ object SafeFiles {
         if (!parent.exists() && !parent.mkdirs()) return false
         val tmp = File(parent, "${file.name}.tmp")
         return try {
-            tmp.writeText(content)
-            // fsync 尽力而为，失败不回滚（rename 后内容已完整）
-            runCatching { tmp.outputStream().fd.sync() }
+            // ⚠️ 必须「写」与「fsync」用同一个流。
+            // 曾经的写法是 `tmp.writeText(content)` 之后再 `tmp.outputStream().fd.sync()`，
+            // 而 Kotlin 的 File.outputStream() 等价于 FileOutputStream(file)（append=false
+            // → O_TRUNC），**打开即把刚写好的内容截断为 0 字节**，
+            // 随后 rename 就把空文件覆盖到目标上 —— 等于摧毁全部持久化数据。
+            java.io.FileOutputStream(tmp).use { out ->
+                out.write(content.toByteArray(Charsets.UTF_8))
+                out.flush()
+                // fsync 尽力而为：失败不影响内容正确性（已写入内核缓冲）
+                runCatching { out.fd.sync() }
+            }
             if (tmp.renameTo(file)) true
             else {
-                // 某些文件系统 renameTo 跨挂载点会失败，退回直接覆盖
+                // 某些文件系统 renameTo 会失败（跨挂载点等），退回直接覆盖
                 file.writeText(content)
                 true
             }

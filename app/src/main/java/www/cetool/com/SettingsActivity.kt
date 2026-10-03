@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,14 +105,13 @@ class SettingsActivity : ComponentActivity() {
     private val gson = Gson()
 
     /**
-     * C6：把输入即时钳制到合法区间。
+     * C6：把输入钳制到合法区间。
      *
-     * 原实现 `take(n)` 只限制位数（历史轮数允许 999、预算允许 99999、字号可以是 0），
-     * 实际钳制发生在 saveSettings 的 coerceIn 里 —— 用户输入的越界值仍显示在界面上，
-     * 保存后静默变成另一个值；字号存 0 更会让聊天文字全部不可见。
+     * ⚠️ 只能在**失焦/保存时**调用，绝不能逐字符调用 —— 逐字符钳制会让中间态不存在：
+     * 想输 15 时，先敲 "1" 立刻被抬到 "10"，再敲 "5" 得到 "105" 又被压成 "30"，
+     * 结果用户根本没法正常输入（只能粘贴）。
      *
-     * 注意：**允许输入过程中短暂为空**（否则用户退格删完后没法继续输），
-     * 只在非空时才钳制。
+     * 输入过程中只做「过滤非数字 + 限长」，把越界修正推迟到用户离开输入框。
      */
     private fun clampNumeric(input: String, min: Int, max: Int): String {
         val digits = input.filter { it.isDigit() }
@@ -119,6 +119,10 @@ class SettingsActivity : ComponentActivity() {
         val value = digits.toLongOrNull() ?: return ""
         return value.coerceIn(min.toLong(), max.toLong()).toString()
     }
+
+    /** 输入过程中的宽松过滤：只留数字并限长，不做区间钳制 */
+    private fun numericInputFilter(input: String, maxDigits: Int = 6): String =
+        input.filter { it.isDigit() }.take(maxDigits)
 
     // ─── UI 状态（Compose 可观察） ───
     private val apiEntries = mutableStateListOf<SettingsKeys.ApiEntry>()
@@ -717,12 +721,18 @@ class SettingsActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = fontSizeText,
-                        // C6：原本 take(2) 无任何下限，可以存 0 → 聊天文字全部不可见。
-                        // 这里限制在 10~30 并即时回填。
-                        onValueChange = { fontSizeText = clampNumeric(it, MIN_FONT_SIZE, MAX_FONT_SIZE) },
+                        // C6：输入时只过滤/限长，失焦时才钳制回填（逐字符钳制会导致无法正常输入）
+                        onValueChange = { fontSizeText = numericInputFilter(it, 3) },
                         label = { Text(getString(R.string.settings_font_size_hint)) },
                         singleLine = true,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { focus ->
+                                if (!focus.isFocused) {
+                                    fontSizeText = clampNumeric(fontSizeText, MIN_FONT_SIZE, MAX_FONT_SIZE)
+                                        .ifBlank { "15" }
+                                }
+                            },
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(Modifier.width(16.dp))
@@ -750,22 +760,38 @@ class SettingsActivity : ComponentActivity() {
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = maxHistoryText,
-                    // C6：原本只 take(3) 允许输入 999，保存时 coerceIn(5,100) 静默钳制，
-                    // 输入框却仍显示用户输入的越界值。这里输入时就钳到合法区间并回填。
-                    onValueChange = { maxHistoryText = clampNumeric(it, SettingsKeys.MAX_HISTORY_MIN, SettingsKeys.MAX_HISTORY_MAX) },
+                    // C6：输入时宽松过滤，失焦时钳制回填（原来只在 saveSettings 里静默钳制，
+                    // 界面上仍显示用户输入的越界值）
+                    onValueChange = { maxHistoryText = numericInputFilter(it, 4) },
                     label = { Text(getString(R.string.label_max_history)) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focus ->
+                            if (!focus.isFocused) {
+                                maxHistoryText = clampNumeric(
+                                    maxHistoryText, SettingsKeys.MAX_HISTORY_MIN, SettingsKeys.MAX_HISTORY_MAX
+                                ).ifBlank { Conversation.MAX_HISTORY.toString() }
+                            }
+                        },
                     shape = RoundedCornerShape(12.dp)
                 )
                 HintText(getString(R.string.max_history_note))
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = worldBudgetText,
-                    onValueChange = { worldBudgetText = clampNumeric(it, MIN_WORLD_BUDGET, MAX_WORLD_BUDGET) },
+                    onValueChange = { worldBudgetText = numericInputFilter(it, 5) },
                     label = { Text(getString(R.string.settings_world_budget_label)) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focus ->
+                            if (!focus.isFocused) {
+                                worldBudgetText = clampNumeric(
+                                    worldBudgetText, MIN_WORLD_BUDGET, MAX_WORLD_BUDGET
+                                ).ifBlank { WorldInfoEngine.DEFAULT_BUDGET.toString() }
+                            }
+                        },
                     shape = RoundedCornerShape(12.dp)
                 )
                 HintText(getString(R.string.settings_world_budget_note))

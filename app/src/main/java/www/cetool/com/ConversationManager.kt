@@ -52,7 +52,17 @@ object ConversationManager {
     private val conversations = java.util.concurrent.CopyOnWriteArrayList<Conversation>()
     private var currentIndex = 0
 
-    private val activeStreams = mutableMapOf<String, EventSource>()
+    /**
+     * S2：发送流程的后台执行器。
+     * 组装上下文（读角色卡/世界书）与 Web 搜索都涉及 I/O，不能放在主线程。
+     */
+    private val SEND_EXECUTOR: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newCachedThreadPool { r ->
+            Thread(r, "sachat-send").apply { isDaemon = true }
+        }
+
+    /** S2：流被后台线程登记/移除，必须用并发容器 */
+    private val activeStreams = java.util.concurrent.ConcurrentHashMap<String, EventSource>()
 
     var onConversationsChanged: (() -> Unit)? = null
     var onCurrentMessageUpdated: ((conversationId: String) -> Unit)? = null
@@ -185,6 +195,52 @@ object ConversationManager {
         onUiUpdate?.invoke()
         onCurrentMessageUpdated?.invoke(conversationId)
 
+        // S2：把「组装历史 + （可能的）Web 搜索 + 发起请求」整体放到后台线程执行。
+        //
+        // 原先这些都在主线程上同步跑：CharacterManager.loadCard / WorldInfoManager.load
+        // 是磁盘 I/O，而 B20 接上的 Web 搜索是**同步网络请求** ——
+        // 主线程 execute() 必然抛 NetworkOnMainThreadException（被 WebSearchClient 自己的
+        // catch 吞掉 → 搜索结果永远注入不进去，B20 依旧等于死功能），
+        // 若该机制不生效则是最长 45 秒的 UI 冻结/ANR。
+        //
+        // 注意：isStreaming / messages 的写入在**上面**已同步完成（仍在调用方线程），
+        // 因此并发二次发送的守卫不受影响。
+        SEND_EXECUTOR.execute {
+            try {
+                buildAndSend(
+                    conv = conv,
+                    conversationId = conversationId,
+                    inputText = inputText,
+                    apiConfig = apiConfig,
+                    thinkingLevel = thinkingLevel,
+                    onModelInfo = onModelInfo,
+                    onUiUpdate = onUiUpdate
+                )
+            } catch (e: Throwable) {
+                // 后台线程的异常绝不能静默消失：必须把会话从流式态放出来，否则永久卡住
+                e.printStackTrace()
+                val existing = getById(conversationId)
+                if (existing != null) {
+                    existing.isStreaming = false
+                    activeStreams.remove(conversationId)
+                    save()
+                    onUiUpdate?.invoke()
+                    onCurrentMessageUpdated?.invoke(conversationId)
+                }
+            }
+        }
+    }
+
+    /** sendMessage 的后半段（后台线程执行）：组装上下文 → Web 搜索 → 发起流式请求 */
+    private fun buildAndSend(
+        conv: Conversation,
+        conversationId: String,
+        inputText: String,
+        apiConfig: ApiConfig,
+        thinkingLevel: String?,
+        onModelInfo: ((model: String?, provider: String?) -> Unit)?,
+        onUiUpdate: (() -> Unit)?
+    ) {
         val historyItems = mutableListOf<MessageItem>()
 
         // ─── 系统提示词组装（1.2 对标酒馆：分段 + 世界书按位置注入 + 多源） ───
@@ -455,15 +511,28 @@ object ConversationManager {
                 // 写进 SharedPreferences，每次 save 全量重写、加载时整份 XML 全量解析，
                 // 带图片附件时启动即卡。改为写独立文件（原子写入），prefs 只留轻量索引。
                 val file = dataFile() ?: return
-                www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
+                var wroteOk = false
+                try {
+                    wroteOk = www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
 
-                // 首次迁移后清掉 prefs 里的历史大字符串，避免它继续拖慢每次 prefs 读写
                 val editor = prefs.edit()
-                if (prefs.contains(KEY_DATA)) editor.remove(KEY_DATA)
+                // M5：只有**确认写入成功**才能删掉 prefs 里的旧副本 ——
+                // 否则磁盘满/权限异常时新旧两份同时消失，数据彻底归零。
+                if (wroteOk && prefs.contains(KEY_DATA)) {
+                    // 首次迁移完成后清掉 prefs 里的大字符串，避免继续拖慢每次 prefs 读写
+                    editor.remove(KEY_DATA)
+                }
                 // B18：KEY_CURRENT_ID 只在 switchTo() 里写，而 load() 又优先读它。
                 // 于是「切历史会话 → 新建会话 → 杀进程」会回到那个历史会话。
                 // 让每次 save 同步该键，两个来源才不会打架。
                 editor.putString(KEY_CURRENT_ID, data.currentId).apply()
+
+                if (!wroteOk) {
+                    android.util.Log.e("ConversationManager", "会话库写入失败，已保留 prefs 旧副本")
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()

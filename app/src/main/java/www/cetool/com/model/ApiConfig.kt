@@ -1,5 +1,7 @@
 package www.cetool.com.model
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
 /**
  * AI API 配置
  */
@@ -17,9 +19,14 @@ data class ApiConfig(
         /**
          * A2：校验 API 地址是否是合法的 http(s) 地址。
          *
-         * OkHttp 的 `Request.Builder().url(...)` 对缺 scheme 的地址抛
+         * OkHttp 的 `Request.Builder().url(...)` 对形态非法的地址抛
          * `IllegalArgumentException`，而聊天发送全链路无 try/catch → 进程被杀。
-         * 这里在保存前与发送前两道拦截。
+         *
+         * M8：必须用 **OkHttp 自己的解析器**（`toHttpUrlOrNull`）判定，不能用
+         * `android.net.Uri` —— Uri 明显更宽松，像
+         * `http://host:abc/v1`（端口非数字）、`https://exa mple.com/v1`（含空格）、
+         * `http://ho%20st/v1` 这类输入在 Uri 下 host 非空、能通过校验，
+         * 却会让 OkHttp 抛异常，崩溃路径依然存在。
          *
          * @return null 表示合法；否则返回可直接展示给用户的错误原因
          */
@@ -31,13 +38,11 @@ data class ApiConfig(
             if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
                 return "API 地址必须以 http:// 或 https:// 开头"
             }
-            return try {
-                val uri = android.net.Uri.parse(trimmed)
-                val host = uri.host
-                if (host.isNullOrBlank()) "API 地址缺少主机名"
-                else null
-            } catch (e: Exception) {
-                "API 地址格式不正确"
+            // 与 OkHttp 完全一致的判定
+            return if (trimmed.toHttpUrlOrNull() == null) {
+                "API 地址格式不正确（请检查主机名、端口与特殊字符）"
+            } else {
+                null
             }
         }
     }

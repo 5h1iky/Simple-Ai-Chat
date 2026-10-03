@@ -448,7 +448,7 @@
     <string name="world_edit_role_filter">角色过滤(user/assistant)</string>
     <string name="world_edit_group">包含组</string>
     <string name="world_edit_group_weight">组权重</string>
-    <string name="world_edit_group_weight_hint">同组条目只会注入一条，权重高的更容易被选中（0-100）</string>
+    <string name="world_edit_group_weight_hint">同组条目只会注入一条，权重高的更容易被选中（常用 0-100，可更大）</string>
     <string name="world_edit_const">常驻</string>
     <string name="world_edit_regex">正则</string>
     <string name="world_edit_case">大小写</string>

@@ -47,25 +47,44 @@ object TavernCardImporter {
     private fun parseRoot(root: com.google.gson.JsonObject): TavernCard {
         val spec = root.get("spec")?.asString ?: ""
 
+        // S3 附带修复：带 entries 的是世界书，不是角色卡 ——
+        // 否则「有 name + description」的世界书会被下面的 v1 分支误判为角色卡，
+        // 随后在 save 阶段报出误导性的「保存失败」。
+        if (root.has("entries")) {
+            throw IllegalArgumentException("这看起来是世界书文件，不是角色卡")
+        }
+
+        val dataObj = root.getAsJsonObject("data")
+
         return when {
             spec == "chara_card_v3" || spec == "chara_card_v2" -> {
-                val dataObj = root.getAsJsonObject("data")
-                    ?: throw IllegalArgumentException("缺少 data 字段")
-                val card = gson.fromJson(dataObj, TavernCardData::class.java)
+                if (dataObj == null) throw IllegalArgumentException("缺少 data 字段")
                 TavernCard(
                     spec = spec,
                     spec_version = root.get("spec_version")?.asString ?: "3.0",
-                    data = card,
+                    data = gson.fromJson(dataObj, TavernCardData::class.java),
+                    avatarBase64 = topLevelAvatar(root)
+                )
+            }
+            // S3：**必须**在 v1 分支之前处理「有 data 对象」的情况。
+            // 本项目的 export() 恒写 {spec, spec_version, data:{...}}，
+            // 所以 v1 卡解析后经 export→parse 往返时 spec 是 "chara_card_v1" 且带 data。
+            // 原先没有这个分支 → save 阶段二次 parse 抛「不支持的格式：chara_card_v1」
+            // → 返回 null → 界面报「保存失败」，**v1 卡实际上完全无法导入**。
+            dataObj != null -> {
+                TavernCard(
+                    spec = spec.ifBlank { "chara_card_v2" },
+                    spec_version = root.get("spec_version")?.asString ?: "2.0",
+                    data = gson.fromJson(dataObj, TavernCardData::class.java),
                     avatarBase64 = topLevelAvatar(root)
                 )
             }
             // B29①：酒馆 v1 卡是扁平结构（字段直接放在根节点，没有 spec / data）
             root.has("name") && (root.has("description") || root.has("first_mes") || root.has("personality")) -> {
-                val card = gson.fromJson(root, TavernCardData::class.java)
                 TavernCard(
                     spec = "chara_card_v1",
                     spec_version = "1.0",
-                    data = card,
+                    data = gson.fromJson(root, TavernCardData::class.java),
                     avatarBase64 = topLevelAvatar(root)
                 )
             }
