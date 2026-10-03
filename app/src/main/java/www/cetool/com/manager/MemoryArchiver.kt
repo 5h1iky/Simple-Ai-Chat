@@ -14,6 +14,12 @@ import www.cetool.com.network.MessageItem
  */
 object MemoryArchiver {
 
+    /**
+     * D10：单次封存请求里对话记录的最大字符数。
+     * 超出部分从**最旧的**消息开始丢弃（保留最近发生的事，对"关系变化/关键事件"更相关）。
+     */
+    private const val MAX_HISTORY_CHARS = 24000
+
     data class ArchiveResult(
         val sessionTitle: String,
         val userRelationType: String,
@@ -57,7 +63,8 @@ object MemoryArchiver {
         for (m in conversation.messages) {
             if (m.role != Message.ROLE_USER && m.role != Message.ROLE_ASSISTANT) continue
             val sender = if (m.role == Message.ROLE_USER) "用户" else card.data.name
-            val content = m.content.replace(Regex("\\[\\[THINKING:[^\\]]+\\]\\]"), "").trim()
+            // C1：用 displayText() 剥离旧格式消息里内嵌的附件全文，否则文件内容会整段进请求
+            val content = m.displayText().replace(Regex("\\[\\[THINKING:[^\\]]+\\]\\]"), "").trim()
             if (content.isNotEmpty()) {
                 chatLines.add("$sender: $content")
             }
@@ -65,7 +72,21 @@ object MemoryArchiver {
         if (chatLines.isEmpty()) {
             return Result.failure(Exception("会话中没有可分析的消息"))
         }
-        val chatHistory = chatLines.joinToString("\n\n")
+        // D10：超长会话会把全部原文塞进单次请求（可能直接超上下文）。
+        // 从**最新**往前累计，只保留最近 MAX_HISTORY_CHARS 个字符。
+        val chatHistory = buildString {
+            val kept = mutableListOf<String>()
+            var total = 0
+            for (line in chatLines.asReversed()) {
+                if (total + line.length > MAX_HISTORY_CHARS && kept.isNotEmpty()) break
+                kept.add(line)
+                total += line.length
+            }
+            append(kept.asReversed().joinToString("\n\n"))
+            if (kept.size < chatLines.size) {
+                append("\n\n（更早的 ${chatLines.size - kept.size} 条消息因长度限制已省略）")
+            }
+        }
 
         // 2. 组装输入（角色卡现状 + 已有关系/事件）
         val fields = card.data.getCharacterFields()
@@ -80,14 +101,22 @@ object MemoryArchiver {
         }
 
         // 3. 请求模型
-        val messages = listOf(
-            MessageItem.text("system", SYSTEM_PROMPT),
-            MessageItem.text("user", inputText)
-        )
+        val systemMessage = MessageItem.text("system", SYSTEM_PROMPT)
         val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption, appContext)
-        var result = client.requestJson(messages, temperature = 0.0, maxOutputTokens = 8192)
+        var result = client.requestJson(
+            listOf(systemMessage, MessageItem.text("user", inputText)),
+            temperature = 0.0,
+            maxOutputTokens = 8192
+        )
         if (result.isFailure && retry) {
-            result = client.requestJson(messages, temperature = 0.0, maxOutputTokens = 8192)
+            // D10：原实现的重试是**完全相同的请求** —— 若失败原因是上下文超长，
+            // 重试必然同样失败。这里做真正的降级：把对话记录截到一半再试一次。
+            val shortened = inputText.take(inputText.length / 2)
+            result = client.requestJson(
+                listOf(systemMessage, MessageItem.text("user", shortened)),
+                temperature = 0.0,
+                maxOutputTokens = 8192
+            )
         }
         val content = result.getOrNull()
             ?: return Result.failure(result.exceptionOrNull() ?: Exception("记忆分析请求失败"))

@@ -40,10 +40,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -1229,6 +1232,8 @@ private fun ApiEntryDialog(
     var url by remember { mutableStateOf(initialEntry.url) }
     var key by remember { mutableStateOf(initialEntry.key) }
     var model by remember { mutableStateOf(initialEntry.model) }
+    // E5：密钥默认掩码显示
+    var keyVisible by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
@@ -1256,12 +1261,38 @@ private fun ApiEntryDialog(
                         .padding(bottom = 10.dp),
                     shape = RoundedCornerShape(12.dp)
                 )
+                // E5：API Key 原本明文回显。改为默认掩码，提供「显示/隐藏」切换，
+                // 避免在公共场合或投屏时泄露密钥。
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
                     label = { Text(context.getString(R.string.label_api_key)) },
                     singleLine = true,
                     enabled = keyEnabled,
+                    visualTransformation = if (keyVisible) {
+                        androidx.compose.ui.text.input.VisualTransformation.None
+                    } else {
+                        androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
+                    ),
+                    trailingIcon = if (keyEnabled && key.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { keyVisible = !keyVisible }) {
+                                Icon(
+                                    imageVector = if (keyVisible) {
+                                        androidx.compose.material.icons.Icons.Filled.VisibilityOff
+                                    } else {
+                                        androidx.compose.material.icons.Icons.Filled.Visibility
+                                    },
+                                    contentDescription = context.getString(
+                                        if (keyVisible) R.string.settings_hide_key else R.string.settings_show_key
+                                    )
+                                )
+                            }
+                        }
+                    } else null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 10.dp),

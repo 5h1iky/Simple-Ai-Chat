@@ -437,23 +437,46 @@ object ConversationManager {
             )
             val json = gson.toJson(data)
             synchronized(lock) {
-                prefs.edit()
-                    .putString(KEY_DATA, json)
-                    // B18：KEY_CURRENT_ID 只在 switchTo() 里写，而 load() 又优先读它。
-                    // 于是「切历史会话 → 新建会话 → 杀进程」会回到那个历史会话。
-                    // 让每次 save 同步该键，两个来源才不会打架。
-                    .putString(KEY_CURRENT_ID, data.currentId)
-                    .apply()
+                // D2：整个会话库（含 base64 附件，单会话可达 27MB）原本序列化成一个大 JSON
+                // 写进 SharedPreferences，每次 save 全量重写、加载时整份 XML 全量解析，
+                // 带图片附件时启动即卡。改为写独立文件（原子写入），prefs 只留轻量索引。
+                val file = dataFile() ?: return
+                www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
+
+                // 首次迁移后清掉 prefs 里的历史大字符串，避免它继续拖慢每次 prefs 读写
+                val editor = prefs.edit()
+                if (prefs.contains(KEY_DATA)) editor.remove(KEY_DATA)
+                // B18：KEY_CURRENT_ID 只在 switchTo() 里写，而 load() 又优先读它。
+                // 于是「切历史会话 → 新建会话 → 杀进程」会回到那个历史会话。
+                // 让每次 save 同步该键，两个来源才不会打架。
+                editor.putString(KEY_CURRENT_ID, data.currentId).apply()
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
+    /** D2：会话库文件（替换原先存在 SharedPreferences 里的大 JSON 字符串） */
+    private fun dataFile(): java.io.File? {
+        if (!::appContext.isInitialized) return null
+        val dir = appContext.filesDir ?: return null
+        return java.io.File(dir, "conversations.json")
+    }
+
+    /** D2：迁移期的读取 —— 优先新文件，回落到旧的 SharedPreferences */
+    private fun readStoredJson(): String? {
+        dataFile()?.let { file ->
+            if (file.exists()) {
+                www.cetool.com.util.SafeFiles.readText(file)?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+        }
+        return prefs.getString(KEY_DATA, null)
+    }
+
     fun load() {
         if (!::prefs.isInitialized) return
         try {
-            val json = prefs.getString(KEY_DATA, null)
+            val json = readStoredJson()
             if (json.isNullOrBlank()) {
                 conversations.clear()
                 conversations.add(Conversation())
@@ -461,6 +484,13 @@ object ConversationManager {
                 return
             }
             val data = gson.fromJson(json, ConversationData::class.java)
+            // D2：损坏/被清空的旧数据不应让整个会话库消失
+            if (data?.conversations == null) {
+                conversations.clear()
+                conversations.add(Conversation())
+                currentIndex = 0
+                return
+            }
             conversations.clear()
             data.conversations.forEach { entry ->
                 val conv = Conversation(

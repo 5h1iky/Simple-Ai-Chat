@@ -40,6 +40,8 @@
     <string name="settings_ai_avatar_picked">AI avatar selected</string>
     <string name="settings_my_avatar_picked">My avatar selected</string>
     <string name="crash_no_browser">Crash log copied to clipboard, but no app found to open the link</string>
+    <string name="settings_show_key">Show API key</string>
+    <string name="settings_hide_key">Hide API key</string>
     <string name="retry">Retry last message</string>
     <string name="edit_system_prompt">Edit system prompt</string>
     <string name="system_prompt_for_conv">System prompt (current conversation)</string>

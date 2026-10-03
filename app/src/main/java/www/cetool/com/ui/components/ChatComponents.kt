@@ -622,6 +622,9 @@ private fun AttachmentViewerDialog(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
+    // E15：连点两次时，先前那个 delay 协程仍会在 1.5s 后把 copied 置回 false，
+    // 于是提示提前消失。改为持有当前任务并在新点击时取消它。
+    var resetJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -653,7 +656,9 @@ private fun AttachmentViewerDialog(
             TextButton(onClick = {
                 clipboard.setText(AnnotatedString(attachment.data))
                 copied = true
-                scope.launch {
+                // E15：取消上一次的复位任务，确保 1.5s 从"最后一次点击"开始计时
+                resetJob?.cancel()
+                resetJob = scope.launch {
                     kotlinx.coroutines.delay(1500)
                     copied = false
                 }
