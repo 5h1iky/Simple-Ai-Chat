@@ -35,10 +35,24 @@ object STChatLogImporter {
             lastTimestamp = ts
 
             val role = if (isUser) Message.ROLE_USER else Message.ROLE_ASSISTANT
+            // B30：原本只跳过「空白的 system」，非空白的旁白/系统条目被直接记成角色发言；
+            // 且 `name` 字段（文件头注释里明确提到）从未读取 ——
+            // 群聊记录里其他角色的台词全部被记到当前角色名下，且事后不可分辨。
+            //
+            // 这里保留 assistant 角色（否则该条会从发给模型的 history 里被整体丢弃），
+            // 但把说话者写进正文，使归属可辨认、不再混淆。
+            val name = obj.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+            val content = when {
+                isSystem && name.isNotBlank() -> "（系统/$name）${mes.trim()}"
+                isSystem -> "（系统）${mes.trim()}"
+                !isUser && name.isNotBlank() -> "$name：${mes.trim()}"
+                else -> mes.trim()
+            }
+
             messages.add(
                 Message(
                     role = role,
-                    content = mes.trim(),
+                    content = content,
                     timestamp = ts
                 )
             )

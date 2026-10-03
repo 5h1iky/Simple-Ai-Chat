@@ -6,6 +6,9 @@ import www.cetool.com.model.WorldEntry
 import www.cetool.com.model.WorldInfo
 import java.io.File
 
+/** B26：解析失败的条目用这个名字标记（判定艺术品：界面识别并展示，引擎跳过不注入） */
+const val BROKEN_ENTRY_NAME = "__broken__"
+
 object WorldInfoManager {
 
     private const val DIR_NAME = "worldinfo"
@@ -21,7 +24,9 @@ object WorldInfoManager {
         val description: String,
         val entryCount: Int,
         val enabled: Boolean,
-        val importedAt: Long = System.currentTimeMillis()
+        val importedAt: Long = System.currentTimeMillis(),
+        /** B4：被停用的条目数（`disable: true` 的酒馆条目导入后在此可见） */
+        val disabledEntryCount: Int = 0
     )
 
     fun list(context: Context): List<WorldInfoSummary> {
@@ -31,7 +36,15 @@ object WorldInfoManager {
             ?.mapNotNull { file ->
                 try {
                     val info = load(context, file.nameWithoutExtension) ?: return@mapNotNull null
-                    WorldInfoSummary(info.id, info.name, info.description, info.entries.size, info.enabled, file.lastModified())
+                    WorldInfoSummary(
+                        id = info.id,
+                        name = info.name,
+                        description = info.description,
+                        entryCount = info.entries.size,
+                        enabled = info.enabled,
+                        importedAt = file.lastModified(),
+                        disabledEntryCount = info.entries.count { !it.enabled }
+                    )
                 } catch (_: Exception) { null }
             }
             ?.sortedByDescending { it.importedAt }
@@ -105,7 +118,20 @@ object WorldInfoManager {
                     injectRole = obj.get("injectRole")?.asString
                 )
                 entries.add(entry)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                // B26：原实现在这里静默 `catch (_: Exception) {}` —— 任何解析失败的条目被
+                // 悄悄丢弃，用户完全看不到；一旦在编辑页保存，丢失就被固化进文件。
+                // 现在把失败原因挂到一个哨兵条目上，界面可以显示出来。
+                val reason = e.message ?: e.javaClass.simpleName
+                entries.add(
+                    WorldEntry(
+                        id = "broken_${entries.size}",
+                        name = BROKEN_ENTRY_NAME,
+                        content = reason,
+                        comment = element.toString()
+                    )
+                )
+            }
         }
         return entries
     }
@@ -116,15 +142,15 @@ object WorldInfoManager {
         val safe = info.copy(id = id)
         val json = buildJson(safe)
         val file = File(getDir(context), "$id.json")
-        file.writeText(json)
+        // C4：原子写入 + IOException 保护（裸 writeText 会让磁盘满/权限异常直接崩溃）
+        www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
         return id
     }
 
     fun overwrite(context: Context, id: String, info: WorldInfo): Boolean {
         val file = File(getDir(context), "$id.json")
         if (!file.exists()) return saveNew(context, info).let { true }
-        file.writeText(buildJson(info))
-        return true
+        return www.cetool.com.util.SafeFiles.writeAtomic(file, buildJson(info)) { it.printStackTrace() }
     }
 
     fun delete(context: Context, id: String) {
@@ -142,6 +168,17 @@ object WorldInfoManager {
         data.addProperty("enabled", info.enabled)
         val entries = com.google.gson.JsonArray()
         for (entry in info.entries) {
+            // B26：不要把「损坏哨兵」写回文件（那会真的把原条目替换掉）。
+            // 保留原始节点即可实现「保存后原始 JSON 字段仍在」。
+            if (entry.name == BROKEN_ENTRY_NAME) {
+                val raw = runCatching {
+                    com.google.gson.JsonParser.parseString(entry.comment).takeIf { it.isJsonObject }
+                }.getOrNull()
+                if (raw != null) {
+                    entries.add(raw)
+                    continue
+                }
+            }
             val obj = com.google.gson.JsonObject()
             obj.addProperty("id", entry.id)
             obj.addProperty("name", entry.name)

@@ -35,6 +35,8 @@ object WorldInfoEngine {
 
         for (entry in worldInfo.entries) {
             if (!entry.enabled) continue
+            // B26：跳过加载阶段产生的损坏哨兵条目，避免把错误信息注入提示词
+            if (entry.name == BROKEN_ENTRY_NAME) continue
 
             // 常驻条目：无条件命中（仍受概率影响）
             if (entry.constantActive) {
@@ -51,7 +53,49 @@ object WorldInfoEngine {
             }
         }
 
-        return hits
+        // B31：分组在此前完全没实现 —— `groupName` 在界面上可见可填，
+        // 但引擎与 ConversationManager 里 0 命中，用户会以为同组互斥生效。
+        // 酒馆语义：同组条目至多注入一条（若已开运送 groupWeight，则按权重挑选）。
+        return applyGroups(hits)
+    }
+
+    /**
+     * B31：同组（groupName 非空）最多保留一条。
+     * 组内按 groupWeight 降序、其次按 insertion_order（priority）升序挑选，
+     * 忠实酒馆「权重高的更易被选中」的行为。
+     */
+    /**
+     * B31：同组（groupName 非空且相同）最多保留一条命中的条目。
+     *
+     * 酒馆语义：组内互斥，选中谁由 groupWeight / insertion_order 决定。
+     * 这里按 `groupWeight` 降序、同权重按 `priority` 升序挑选，其余丢弃。
+     * 未分组条目不受影响，且**保持原始命中顺序**（避免分组挑选打乱注入次序）。
+     */
+    private fun applyGroups(hits: List<WorldEntry>): List<WorldEntry> {
+        if (hits.size <= 1) return hits
+        if (hits.none { it.groupName.isNotBlank() }) return hits
+
+        // 先算出每个分组的胜者
+        val bestOfGroup = LinkedHashMap<String, WorldEntry>()
+        for (entry in hits) {
+            val group = entry.groupName.trim()
+            if (group.isBlank()) continue
+            val current = bestOfGroup[group]
+            bestOfGroup[group] = when {
+                current == null -> entry
+                entry.groupWeight > current.groupWeight -> entry
+                entry.groupWeight < current.groupWeight -> current
+                entry.priority < current.priority -> entry
+                else -> current
+            }
+        }
+
+        // 再按原始命中顺序输出：未分组的全留，分组的只留胜者（每组一次）
+        val emittedGroups = HashSet<String>()
+        return hits.filter { entry ->
+            val group = entry.groupName.trim()
+            if (group.isBlank()) true else emittedGroups.add(group) && bestOfGroup[group] === entry
+        }
     }
 
     /** 选择性（次级关键词）过滤：只在 selective 启用时生效 */
