@@ -63,12 +63,18 @@ class SplashActivity : ComponentActivity() {
         val crashLogLoaded = androidx.compose.runtime.mutableStateOf(false)
         val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
         executor.execute {
-            val log = CrashReporter.getCrashLog(this)?.takeIf { it.isNotBlank() }
-            runOnUiThread {
-                crashLogState.value = log
-                crashLogLoaded.value = true
+            // minor：必须用 try/finally 兜住 —— 若读盘抛的是 Error（例如日志过大导致 OOM）
+            // 而只 catch Exception，crashLogLoaded 永远不会置 true，
+            // LaunchedEffect 会一直早退 → 启动页永久空白、既不放动画也不跳转。
+            try {
+                val log = CrashReporter.getCrashLog(this)?.takeIf { it.isNotBlank() }
+                runOnUiThread { crashLogState.value = log }
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            } finally {
+                runOnUiThread { crashLogLoaded.value = true }
+                executor.shutdown()
             }
-            executor.shutdown()
         }
 
         setContent {

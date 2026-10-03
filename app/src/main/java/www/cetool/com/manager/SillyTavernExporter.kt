@@ -103,6 +103,10 @@ object SillyTavernExporter {
         ext.addProperty("display_index", e.displayIndex)
         ext.addProperty("vectorized", e.vectorized)
         e.injectRole?.let { ext.addProperty("role", it) }
+        // M1：`role`（按消息角色过滤，引擎 buildSearchSpace 会消费）在酒馆格式里
+        // **没有对应字段**，此前导出即永久丢失。用带前缀的自定义键携带，
+        // 酒馆会忽略未知键，本项目导入器则能读回。
+        if (!e.role.isNullOrBlank()) ext.addProperty("sachat_role", e.role)
         obj.add("extensions", ext)
 
         return obj

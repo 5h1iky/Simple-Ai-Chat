@@ -260,8 +260,10 @@ object WorldInfoImporter {
             position = position,
             content = content,
             injectDepth = injectDepth,
-            // 酒馆的 role 是 @D 深度注入时的消息角色（见 injectRole），不是匹配角色过滤，这里不映射
-            role = null,
+            // M1：`role`（按消息角色过滤）在酒馆格式里没有对应字段，
+            // 原名 `role` 被酒馆占用为 @D 注入角色（见下方 injectRole），
+            // 所以本项目用扩展键 sachat_role 携带，这里读回以便无损往返。
+            role = str(ext?.get("sachat_role"))?.takeIf { it.isNotBlank() },
             keywords = keywords.toMutableList(),
             useRegex = useRegex,
             caseSensitive = bool(extOrTop(ext, entry, "case_sensitive", "caseSensitive"), false),

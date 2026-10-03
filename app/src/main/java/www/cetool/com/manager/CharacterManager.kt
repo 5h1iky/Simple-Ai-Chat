@@ -125,20 +125,19 @@ object CharacterManager {
         }
     }
 
-    /** M7：所有角色卡当前引用的内嵌世界书 id 集合 */
+    /**
+     * M7：所有角色卡当前引用的内嵌世界书 id 集合。
+     *
+     * minor：这里刻意**不**用 `TavernCardImporter.parse` 做完整反序列化 ——
+     * 那会把每张卡的整个 JSON（含 `avatarBase64`，单卡可达数百 KB~数 MB）解析成对象，
+     * 而调用点（删卡、导入去重）都在主线程，卡一多就明显卡顿。
+     * 只从 JSON 树里取 `data.extensions.sachat_worldbook_id` 即可。
+     */
     private fun allCardBookIds(context: Context): Set<String> {
         val dir = getDir(context)
         return dir.listFiles()
             ?.filter { it.extension == "json" }
-            ?.mapNotNull { file ->
-                try {
-                    TavernCardImporter.parse(www.cetool.com.util.SafeFiles.readText(file) ?: return@mapNotNull null)
-                        .getOrNull()?.data?.extensions?.get(SACHAT_WORLDBOOK_ID)
-                        ?.takeIf { it.isJsonPrimitive }?.asString
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            ?.mapNotNull { readEmbeddedBookId(it) }
             ?.toSet()
             ?: emptySet()
     }
@@ -152,16 +151,24 @@ object CharacterManager {
         val dir = getDir(context)
         return dir.listFiles()
             ?.filter { it.extension == "json" && it.nameWithoutExtension != excludeCharacterId }
-            ?.any { file ->
-                val card = try {
-                    TavernCardImporter.parse(www.cetool.com.util.SafeFiles.readText(file) ?: return@any false)
-                        .getOrNull()
-                } catch (_: Exception) {
-                    null
-                }
-                card?.data?.extensions?.get(SACHAT_WORLDBOOK_ID)
-                    ?.takeIf { it.isJsonPrimitive }?.asString == bookId
-            } ?: false
+            ?.any { readEmbeddedBookId(it) == bookId }
+            ?: false
+    }
+
+    /** 轻量读取卡片里记录的内嵌世界书 id（只走 JSON 树，不建对象、不碰 base64 头像） */
+    private fun readEmbeddedBookId(file: java.io.File): String? {
+        return try {
+            val text = www.cetool.com.util.SafeFiles.readText(file) ?: return null
+            val root = com.google.gson.JsonParser.parseString(text)
+            if (!root.isJsonObject) return null
+            root.asJsonObject.getAsJsonObject("data")
+                ?.getAsJsonObject("extensions")
+                ?.get(SACHAT_WORLDBOOK_ID)
+                ?.takeIf { it.isJsonPrimitive }
+                ?.asString
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**

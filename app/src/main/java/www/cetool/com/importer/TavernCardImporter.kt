@@ -47,14 +47,19 @@ object TavernCardImporter {
     private fun parseRoot(root: com.google.gson.JsonObject): TavernCard {
         val spec = root.get("spec")?.asString ?: ""
 
-        // S3 附带修复：带 entries 的是世界书，不是角色卡 ——
+        // 带 entries 的是世界书，不是角色卡（顶层）。
         // 否则「有 name + description」的世界书会被下面的 v1 分支误判为角色卡，
         // 随后在 save 阶段报出误导性的「保存失败」。
-        if (root.has("entries")) {
+        // 注意用 get()?.isJsonNull 判存在 —— has() 对显式的 `"entries": null` 也返回 true，
+        // 那会把这种文件误判成世界书。
+        if (root.get("entries")?.isJsonNull == false) {
             throw IllegalArgumentException("这看起来是世界书文件，不是角色卡")
         }
 
-        val dataObj = root.getAsJsonObject("data")
+        // 只有真正的 JSON 对象才算 data；`"data": null` 会被 Gson 表示成 JsonNull，
+        // 直接 getAsJsonObject 会抛 ClassCastException（原来那种文件能走 v1 扁平分支）。
+        val dataEl = root.get("data")
+        val dataObj = dataEl?.takeIf { it.isJsonObject }?.asJsonObject
 
         return when {
             spec == "chara_card_v3" || spec == "chara_card_v2" -> {
@@ -66,12 +71,18 @@ object TavernCardImporter {
                     avatarBase64 = topLevelAvatar(root)
                 )
             }
-            // S3：**必须**在 v1 分支之前处理「有 data 对象」的情况。
+            // S3：**必须**在 v1 扁平分支之前处理「有 data 对象」的情况。
             // 本项目的 export() 恒写 {spec, spec_version, data:{...}}，
             // 所以 v1 卡解析后经 export→parse 往返时 spec 是 "chara_card_v1" 且带 data。
             // 原先没有这个分支 → save 阶段二次 parse 抛「不支持的格式：chara_card_v1」
             // → 返回 null → 界面报「保存失败」，**v1 卡实际上完全无法导入**。
-            dataObj != null -> {
+            //
+            // M2：但必须排除「包裹型世界书」——本项目旧的 buildJson 格式是
+            // {version, type:"lorebook", data:{id,name,description,enabled,entries:[...]}}，
+            // MuseAI 是 {schema:"museai.partner-items", data:{...}}。
+            // 它们都带 data 对象，若不排除就会被静默导入成一张以世界书为名的垃圾卡
+            //（角色卡导入入口用的是 SAF 任意 MIME，用户选错文件即可达）。
+            dataObj != null && !looksLikeWorldBook(root, dataObj) -> {
                 TavernCard(
                     spec = spec.ifBlank { "chara_card_v2" },
                     spec_version = root.get("spec_version")?.asString ?: "2.0",
@@ -79,8 +90,10 @@ object TavernCardImporter {
                     avatarBase64 = topLevelAvatar(root)
                 )
             }
-            // B29①：酒馆 v1 卡是扁平结构（字段直接放在根节点，没有 spec / data）
-            root.has("name") && (root.has("description") || root.has("first_mes") || root.has("personality")) -> {
+            // v1 卡是扁平结构（字段直接放在根节点，没有 spec / data）
+            dataObj == null &&
+                root.has("name") &&
+                (root.has("description") || root.has("first_mes") || root.has("personality")) -> {
                 TavernCard(
                     spec = "chara_card_v1",
                     spec_version = "1.0",
@@ -90,6 +103,27 @@ object TavernCardImporter {
             }
             else -> throw IllegalArgumentException("不支持的格式：$spec")
         }
+    }
+
+    /**
+     * M2：判断是不是世界书（而不是角色卡）。
+     * 覆盖：本项目包裹型世界书（type=lorebook / data 里有 entries）、
+     * MuseAI 文档（schema=museai.*），以及任何 data.entries 存在的文件。
+     */
+    private fun looksLikeWorldBook(
+        root: com.google.gson.JsonObject,
+        dataObj: com.google.gson.JsonObject
+    ): Boolean {
+        if (dataObj.get("entries")?.isJsonNull == false) return true
+        val type = root.get("type")?.takeIf { it.isJsonPrimitive }?.asString
+        if (type == "lorebook") return true
+        val schema = root.get("schema")?.takeIf { it.isJsonPrimitive }?.asString
+        if (schema != null && schema.startsWith("museai.")) return true
+        // 世界书的标志性字段：data 里有 id+description+enabled 但没有角色卡字段
+        val hasCardField = dataObj.has("first_mes") || dataObj.has("personality") ||
+            dataObj.has("mes_example") || dataObj.has("alternate_greetings")
+        val hasBookField = dataObj.has("entries") || (dataObj.has("id") && dataObj.has("enabled"))
+        return hasBookField && !hasCardField
     }
 
     private fun topLevelAvatar(root: com.google.gson.JsonObject): String? =

@@ -205,6 +205,13 @@ object ConversationManager {
         //
         // 注意：isStreaming / messages 的写入在**上面**已同步完成（仍在调用方线程），
         // 因此并发二次发送的守卫不受影响。
+        //
+        // ⚠️ 但后台化本身放大了「取消窗口」：从这一刻到 `activeStreams[id] = es` 之间，
+        // 用户在界面上点「清空会话」/「删除会话」时，cancelStream 里
+        // `activeStreams.remove(id)` 还拿不到任何东西（流尚未登记），
+        // 于是旧实现会：请求照发、token 白烧，且分片会被追加到**清空后新建的**
+        // assistant 占位消息上。buildAndSend 内部因此在「发请求前」与「拿到句柄后」
+        // 各校验一次 isStreaming，见下方 CANCEL-WINDOW 注释。
         SEND_EXECUTOR.execute {
             try {
                 buildAndSend(
@@ -219,10 +226,22 @@ object ConversationManager {
             } catch (e: Throwable) {
                 // 后台线程的异常绝不能静默消失：必须把会话从流式态放出来，否则永久卡住
                 e.printStackTrace()
+                // 若请求已经发出（异常发生在 sendChatStream 之后），
+                // 只 remove 不 cancel 会让这条流永远停不下来 —— 先取消再摘除。
+                activeStreams.remove(conversationId)?.cancel()
                 val existing = getById(conversationId)
                 if (existing != null) {
                     existing.isStreaming = false
-                    activeStreams.remove(conversationId)
+                    // 让用户看到失败原因，而不是一个永远空白的助手气泡
+                    val lastIndex = existing.messages.size - 1
+                    if (lastIndex >= 0 && existing.messages[lastIndex].role == ROLE_ASSISTANT &&
+                        existing.messages[lastIndex].content.isBlank()
+                    ) {
+                        val lastMsg = existing.messages[lastIndex]
+                        existing.messages[lastIndex] = lastMsg.copy(
+                            content = "[错误: ${e.message ?: e.javaClass.simpleName}]"
+                        )
+                    }
                     save()
                     onUiUpdate?.invoke()
                     onCurrentMessageUpdated?.invoke(conversationId)
@@ -400,6 +419,15 @@ object ConversationManager {
         val zenModelOption = providerPrefs.getString(SettingsKeys.KEY_ZEN_MODEL, SettingsKeys.ZEN_MODEL_DEFAULT)
             ?: SettingsKeys.ZEN_MODEL_DEFAULT
         val client = AiApiClient(apiConfig, thinkingLevel, providerMode, kiloModelOption, zenModelOption, appContext)
+
+        // CANCEL-WINDOW ②：发请求之前再确认一次会话仍在流式状态。
+        // 用户在组装上下文 / Web 搜索期间清空或删除了会话时，这里直接放弃，
+        // 连请求都不发出去（避免白烧 token）。
+        if (!conv.isStreaming) {
+            save()
+            return
+        }
+
         val eventSource = client.sendChatStream(
             messages = historyItems,
             onModelInfo = onModelInfo,
@@ -455,13 +483,16 @@ object ConversationManager {
                 onCurrentMessageUpdated?.invoke(conversationId)
             }
         )
-        // 注意：onError/onFinish 可能**同步**触发（例如 A2 的地址非法路径在
-        // sendChatStream 内部就直接回调了 onError，此时它已经把自己从 activeStreams
-        // 里移除过）。无条件写回会留下一个永远取消不掉的陈旧条目，
-        // 因此只在会话仍处于流式状态时才登记。
-        if (conv.isStreaming) {
-            activeStreams[conversationId] = eventSource
+        // CANCEL-WINDOW ①：拿到句柄后如果会话已不再处于流式状态，
+        // 说明用户在「组装上下文 / Web 搜索」这段时间里点了清空或删除会话
+        // （cancelStream 当时还没有句柄可取消）。此时必须把刚建立的流**立刻取消**，
+        // 否则它会继续消耗 token，并把分片追加到清空后新建的助手占位消息上。
+        if (!conv.isStreaming) {
+            eventSource.cancel()
+            save()
+            return
         }
+        activeStreams[conversationId] = eventSource
         save()
     }
 
@@ -546,14 +577,32 @@ object ConversationManager {
         return java.io.File(dir, "conversations.json")
     }
 
-    /** D2：迁移期的读取 —— 优先新文件，回落到旧的 SharedPreferences */
+    /**
+     * D2：迁移期的读取 —— 优先新文件，回落到旧的 SharedPreferences。
+     *
+     * minor-6：判据从「非空」加强为「可解析」。半截/混合的非法 JSON
+     * （进程在 fallback 覆盖期间被杀、或磁盘写坏）若被判为有效，
+     * `load()` 会清空整个会话库并只留一条空白会话，随后任何一次 `save()`
+     * 就把它固化 —— 永久丢失。这里先验证能否解析出预期的顶层结构。
+     */
     private fun readStoredJson(): String? {
         dataFile()?.let { file ->
-            if (file.exists()) {
-                www.cetool.com.util.SafeFiles.readText(file)?.takeIf { it.isNotBlank() }?.let { return it }
-            }
+            // readTextWithRecovery：目标为空时可用上次保留的 .tmp 顶替
+            val raw = www.cetool.com.util.SafeFiles.readTextWithRecovery(file)
+            if (raw != null && isParsableConversationData(raw)) return raw
         }
-        return prefs.getString(KEY_DATA, null)
+        return prefs.getString(KEY_DATA, null)?.takeIf { isParsableConversationData(it) }
+    }
+
+    /** 能否解析成预期的会话库结构（不做完整反序列化，只验证顶层形状） */
+    private fun isParsableConversationData(json: String): Boolean {
+        if (json.isBlank()) return false
+        return try {
+            val root = com.google.gson.JsonParser.parseString(json)
+            root.isJsonObject && root.asJsonObject.get("conversations")?.isJsonArray == true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun load() {
