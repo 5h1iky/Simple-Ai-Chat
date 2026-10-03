@@ -520,7 +520,13 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Toast.makeText(this, getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
-        startActivity(Intent(this, ChatActivity::class.java))
+        // B17：原实现直接 startActivity，返回栈会变成 [Chat#1, Chat#2]，
+        // 且 ConversationManager 的两个回调只在 ChatActivity.onCreate 注册 → 旧实例回调为 null。
+        // 用 CLEAR_TOP + SINGLE_TOP 复用已有的 ChatActivity。
+        val intent = Intent(this, ChatActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(intent)
         finish()
     }
 

@@ -141,17 +141,22 @@ fun MessageList(
     // 附件全文查看器：只有用户主动打开时才渲染全文（大文件不拖慢聊天列表）
     var viewingAttachment by remember { mutableStateOf<AttachmentInfo?>(null) }
 
+    // B9：系统提示折叠项占 LazyColumn 的 index 0，消息 i 实际位于 index i+1。
+    // 直接用 messages 的下标滚会永远差一格（系统提示非空时 100% 发生）。
+    val headerCount = if (systemPromptPreview.isNotBlank()) 1 else 0
+    val messageToIndex: (Int) -> Int = { it + headerCount }
+
     // 新消息自动滚动到底部
-    LaunchedEffect(messages.size) {
+    LaunchedEffect(messages.size, headerCount) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+            listState.animateScrollToItem(messageToIndex(messages.size - 1))
         }
     }
     // 搜索跳转
     LaunchedEffect(scrollTarget) {
         val target = scrollTarget
         if (target != null && target >= 0 && target < messages.size) {
-            listState.animateScrollToItem(target)
+            listState.animateScrollToItem(messageToIndex(target))
             onClearScrollTarget()
         }
     }

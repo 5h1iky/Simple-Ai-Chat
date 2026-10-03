@@ -320,19 +320,7 @@ class ChatActivity : ComponentActivity() {
             "v" + packageManager.getPackageInfo(packageName, 0).versionName
         } catch (_: Exception) { "" }
 
-        ConversationManager.onConversationsChanged = {
-            runOnUiThread {
-                refreshCurrentConversation()
-            }
-        }
-        ConversationManager.onCurrentMessageUpdated = { convId ->
-            runOnUiThread {
-                if (convId == currentConversation?.id) {
-                    currentConversation?.let { conv -> messagesState.value = conv.messages.toList() }
-                }
-            }
-        }
-
+        bindConversationCallbacks()
         refreshCurrentConversation()
 
         // Free Gateway: OpenKilo / OpenCode Zen 免费模式无需 API Key，跳过配置校验
@@ -361,6 +349,38 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * B17：注册 ConversationManager 的两个全局回调。
+     *
+     * 原实现只在 onCreate 注册、onDestroy 置 null，而 onResume 不重注册：
+     * 从设置页返回时 ChatActivity 已恢复显示但两个回调都是 null（抽屉/历史不再刷新）；
+     * 且 apiConfig / providerMode / 字号等仍是 onCreate 时的旧值。
+     */
+    private fun bindConversationCallbacks() {
+        ConversationManager.onConversationsChanged = {
+            runOnUiThread { refreshCurrentConversation() }
+        }
+        // D1：这里是每 token 都会触发的回调，必须避免任何磁盘 I/O。
+        ConversationManager.onCurrentMessageUpdated = { convId ->
+            runOnUiThread { syncStreamingUi(convId) }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 从设置页/角色页返回后重绑回调并重载配置，避免使用 onCreate 时的旧值
+        bindConversationCallbacks()
+        loadConfig()
+        applyBackground()
+        val sp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        webSearchConfigured = sp.getString(SettingsKeys.KEY_WEB_SEARCH_URL, "")?.isNotBlank() == true
+        webSearchEnabled = sp.getBoolean(SettingsKeys.KEY_WEB_SEARCH_ENABLED, false)
+        thinkingEnabled = sp.getBoolean(SettingsKeys.KEY_THINKING_ENABLED, false)
+        thinkingLevel = sp.getString(SettingsKeys.KEY_THINKING_LEVEL, "medium") ?: "medium"
+        // 会话可能被外部（世界书页/设置页/回收）改过，且流式可能已结束
+        refreshCurrentConversation()
+    }
+
     override fun onDestroy() {
         ConversationManager.onConversationsChanged = null
         ConversationManager.onCurrentMessageUpdated = null
@@ -371,12 +391,6 @@ class ChatActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         ConversationManager.save()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // 从其他页面返回（如世界书管理页删除/修改）后同步当前对话的绑定提示
-        refreshCurrentConversation()
     }
 
     // ───────────────────────── Compose 页面 ─────────────────────────
@@ -1247,8 +1261,10 @@ class ChatActivity : ComponentActivity() {
                     val keyword = searchKeyword.trim()
                     if (keyword.isBlank()) return@TextButton
                     val matches = conv.messages.mapIndexedNotNull { index, msg ->
-                        if (msg.content.contains(keyword, ignoreCase = true)) {
-                            val preview = msg.content.take(80).replace("\n", " ")
+                        // C1：搜索必须用 displayText() —— 旧格式消息的 content 里嵌着
+                        // "[文件: 名]\n<全文>" 前缀，会让命中结果带上整个文件的内容。
+                        if (msg.displayText().contains(keyword, ignoreCase = true)) {
+                            val preview = msg.displayText().take(80).replace("\n", " ")
                             val role = if (msg.role == Message.ROLE_USER) getString(R.string.role_user_label) else getString(R.string.role_ai_label)
                             "$role: $preview" to index
                         } else null
@@ -1796,6 +1812,29 @@ class ChatActivity : ComponentActivity() {
         return Bitmap.createBitmap(scaled, x, y, w, h)
     }
 
+    /**
+     * D1：每个流式分片都会走到这里，而原实现每次都做「读角色卡文件 + 每本世界书读盘
+     * + 复制整个会话列表」，再加上 `onCurrentMessageUpdated` 会触发第二次同样的刷新
+     * → 每个 token 两次全量刷新 + 多次文件读取，是卡顿/ANR 的主来源。
+     *
+     * 这里把刷新拆成两层：
+     * - [syncStreamingUi]：只在 UI 线程更新消息列表与流式标志，**不做任何磁盘 I/O**
+     * - [refreshCurrentConversation]：完整刷新（含读盘），只在非流式路径调用
+     */
+    private fun syncStreamingUi(conversationId: String) {
+        if (currentConversation?.id != conversationId) {
+            // 目标不是当前会话（用户已切走）→ 走一次完整刷新把状态对齐
+            refreshCurrentConversation()
+            return
+        }
+        val conv = ConversationManager.getById(conversationId) ?: return
+        currentConversation = conv
+        isStreaming = conv.isStreaming
+        val snapshot = conv.messages.toList()
+        messagesState.value = snapshot
+        isEmptyConversation = snapshot.isEmpty()
+    }
+
     private fun refreshCurrentConversation() {
         currentConversation = ConversationManager.current
         val conv = currentConversation ?: return
@@ -2012,7 +2051,8 @@ class ChatActivity : ComponentActivity() {
                 }
             },
             onUiUpdate = {
-                runOnUiThread { refreshCurrentConversation() }
+                // D1：这是每 token 的回调（SSE 线程 → 主线程），不要读盘
+                runOnUiThread { syncStreamingUi(conv.id) }
             }
         )
 
@@ -2041,16 +2081,25 @@ class ChatActivity : ComponentActivity() {
             return
         }
 
-        val lastUserText = conv.messages[lastUserIdx].content
+        val lastUserMsg = conv.messages[lastUserIdx]
 
         val hasError = conv.messages.size > lastUserIdx + 1
             && conv.messages.last().role == Message.ROLE_ASSISTANT
             && conv.messages.last().content.contains("[错误:")
 
+        // B10：这里原本直接用 content —— 旧格式消息的 "[文件: 名]\n<全文>" 前缀会被
+        // 当成用户输入重发，同时附件丢失。统一用 displayText() 剥离该前缀。
+        val lastUserText = lastUserMsg.displayText()
+
         if (!hasError) {
             inputText = lastUserText
             return
         }
+
+        // B10②：把该消息的附件恢复成待发送附件，重试才等于「重发同一条消息」
+        pendingAttachmentType = lastUserMsg.attachmentType
+        pendingAttachmentData = lastUserMsg.attachmentData
+        pendingAttachmentName = lastUserMsg.attachmentName
 
         conv.messages.removeAt(conv.messages.size - 1)
         conv.messages.removeAt(lastUserIdx)
@@ -2116,10 +2165,12 @@ class ChatActivity : ComponentActivity() {
                         return
                     }
 
+                    // B11：字节永远是 JPEG，故把文件名后缀一并规范化，
+                    // 避免导出/查看处看到 a.png 却装着 JPEG 字节。
                     val base64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
                     pendingAttachmentType = ATTACH_TYPE_IMAGE
                     pendingAttachmentData = base64
-                    pendingAttachmentName = fileName
+                    pendingAttachmentName = normalizeImageName(fileName)
                     inputHint = getString(R.string.attach_img_hint, fileName, getString(R.string.hint_input))
                     Toast.makeText(this, R.string.toast_file_attached, Toast.LENGTH_SHORT).show()
                 }
@@ -2128,6 +2179,13 @@ class ChatActivity : ComponentActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.file_read_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** B11：把图片附件名规范化为与真实编码一致的 .jpg */
+    private fun normalizeImageName(name: String): String {
+        val dot = name.lastIndexOf('.')
+        if (dot <= 0) return "$name.jpg"
+        return name.substring(0, dot) + ".jpg"
     }
 
     private fun getFileName(uri: Uri): String? {

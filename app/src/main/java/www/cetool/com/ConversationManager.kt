@@ -2,6 +2,7 @@ package www.cetool.com
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 import com.google.gson.Gson
 import okhttp3.sse.EventSource
 import www.cetool.com.SettingsKeys
@@ -254,7 +255,10 @@ object ConversationManager {
             val msg = conv.messages[i]
             if (msg.role == ROLE_USER || msg.role == ROLE_ASSISTANT) {
                 if (msg.attachmentType == Message.ATTACH_TYPE_IMAGE && msg.attachmentData != null) {
-                    val mimeType = if (msg.attachmentName?.lowercase()?.endsWith(".png") == true) "image/png" else "image/jpeg"
+                    // B11：图片一律被压缩成 JPEG 字节，但此处原本按文件名后缀判 MIME，
+                    // 于是 a.png 会生成 data:image/png;base64,<JPEG 字节>，
+                    // 严格校验 MIME 的网关会拒收。MIME 以真实编码格式为准。
+                    val mimeType = guessImageMime(msg.attachmentData!!)
                     historyItems.add(MessageItem.multimodal(msg.role, msg.content, msg.attachmentData, mimeType))
                 } else if (msg.attachmentType == Message.ATTACH_TYPE_TEXT && msg.attachmentData != null) {
                     // 文本附件作为独立 file 内容块发送，用户消息正文保持纯净。
@@ -492,6 +496,30 @@ object ConversationManager {
      * {{char}} 的取值：角色卡名字优先，其次是 AI 显示名。
      * 冒险模式无单一主角时退回 AI 显示名。
      */
+    /**
+     * 按**实际字节头**判断图片 MIME（B11）。
+     *
+     * 附件一律被压成 JPEG 写出，但历史上 MIME 是按文件名后缀判定的，
+     * 于是 `a.png` 会生成 `data:image/png;base64,<JPEG 字节>`，
+     * 严格校验 MIME 的网关会拒收或解码失败。
+     */
+    private fun guessImageMime(base64: String): String {
+        val header = try {
+            Base64.decode(base64, Base64.DEFAULT)
+        } catch (_: Exception) {
+            return "image/jpeg"
+        }
+        fun hex(i: Int) = header.getOrNull(i)?.toInt()?.and(0xFF) ?: -1
+        return when {
+            hex(0) == 0x89 && hex(1) == 0x50 && hex(2) == 0x4E && hex(3) == 0x47 -> "image/png"
+            hex(0) == 0xFF && hex(1) == 0xD8 && hex(2) == 0xFF -> "image/jpeg"
+            hex(0) == 0x47 && hex(1) == 0x49 && hex(2) == 0x46 -> "image/gif"
+            hex(0) == 0x52 && hex(1) == 0x49 && hex(2) == 0x46 &&
+                hex(8) == 0x57 && hex(9) == 0x45 && hex(10) == 0x42 && hex(11) == 0x50 -> "image/webp"
+            else -> "image/jpeg"
+        }
+    }
+
     private fun charDisplayName(
         conv: Conversation,
         card: www.cetool.com.model.TavernCard? = null
