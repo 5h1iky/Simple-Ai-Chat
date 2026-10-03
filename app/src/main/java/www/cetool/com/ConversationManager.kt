@@ -391,7 +391,13 @@ object ConversationManager {
                 onCurrentMessageUpdated?.invoke(conversationId)
             }
         )
-        activeStreams[conversationId] = eventSource
+        // 注意：onError/onFinish 可能**同步**触发（例如 A2 的地址非法路径在
+        // sendChatStream 内部就直接回调了 onError，此时它已经把自己从 activeStreams
+        // 里移除过）。无条件写回会留下一个永远取消不掉的陈旧条目，
+        // 因此只在会话仍处于流式状态时才登记。
+        if (conv.isStreaming) {
+            activeStreams[conversationId] = eventSource
+        }
         save()
     }
 

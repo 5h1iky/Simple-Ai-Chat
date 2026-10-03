@@ -1276,6 +1276,17 @@ private fun ApiEntryDialog(
                         .padding(bottom = 10.dp),
                     shape = RoundedCornerShape(12.dp)
                 )
+                // E3：用户填入 http:// 时明确告知密钥会明文传输。
+                // 不禁用明文（自建 Ollama/LM Studio 等局域网端点依赖它），
+                // 但要让用户知道这个选择意味着什么。
+                if (keyEnabled && url.trim().lowercase().startsWith("http://")) {
+                    Text(
+                        text = context.getString(R.string.settings_cleartext_warning),
+                        fontSize = 12.sp,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                }
                 // E5：API Key 原本明文回显。改为默认掩码，提供「显示/隐藏」切换，
                 // 避免在公共场合或投屏时泄露密钥。
                 OutlinedTextField(

@@ -205,6 +205,8 @@ class AiApiClient(
         // 否则异常会穿透到 Compose 点击回调 → 主线程崩溃。
         val urlError = ApiConfig.validateUrl(endpoint.url)
         if (urlError != null) {
+            // 同样要报告模型获取失败，否则顶栏会停在「正在获取模型…」（B12 同源问题）
+            onModelInfo?.invoke(null, null)
             onError(urlError)
             return EMPTY_EVENT_SOURCE
         }
@@ -250,10 +252,19 @@ class AiApiClient(
             onFinish()
         }
 
-        /** B12：失败路径同样要收尾，否则 OkHttp 不会再回调 onClosed，
-         *  onModelInfo(null, null) 永不触发 → 顶栏永远停在「正在获取模型…」 */
+        /**
+         * B12：失败路径必须自己收尾 —— OkHttp 的 `onFailure` 是终止路径，
+         * 之后**不会再回调 `onClosed`**，所以 `finishStream()` 永远不会被调用，
+         * `onModelInfo(null, null)` 也就不触发 → 顶栏一直停在「模型：正在获取模型…」，
+         * 用户只在气泡里看到错误，顶栏却像还在加载。
+         *
+         * 这里显式补上「模型信息获取失败」的回调，再上报错误（onError 由
+         * ConversationManager 负责把 isStreaming 复位并保存）。
+         */
         fun failStream(message: String) {
+            if (finished) return
             finished = true
+            if (!modelReported) onModelInfo?.invoke(null, null)
             onError(message)
         }
 

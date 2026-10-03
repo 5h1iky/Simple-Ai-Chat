@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  E3：网络安全策略。
+
+  本应用是「用户自带端点」的客户端：api_url 由用户在设置页自由填写，
+  常见的自建服务（Ollama / LM Studio / LocalAI / one-api 网关）就部署在
+  `http://192.168.x.x:port` 这类局域网明文地址上。
+
+  这里**显式声明**策略：默认信任系统 CA（HTTPS 正常校验，不做任何降级），
+  同时允许用户明文访问其自定义端点 —— 因为禁用会把上述自建场景彻底堵死。
+  风险由界面层承担：用户填入 http:// 地址时会收到明文传输警告
+  （见 SettingsActivity 的 ApiEntryDialog 与明文提示文案）。
+
+  注意：这里**不**加入任何 trust-anchors 覆盖，即不会削弱 HTTPS 的证书校验。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

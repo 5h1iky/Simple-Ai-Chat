@@ -43,6 +43,7 @@
     <string name="settings_show_key">Show API key</string>
     <string name="settings_hide_key">Hide API key</string>
     <string name="char_list_name_missing">Character card has no name and cannot be imported</string>
+    <string name="settings_cleartext_warning">⚠ This is a plain http:// address: your API key and chat content will travel unencrypted. Use it only on a trusted local network.</string>
     <string name="retry">Retry last message</string>
     <string name="edit_system_prompt">Edit system prompt</string>
     <string name="system_prompt_for_conv">System prompt (current conversation)</string>

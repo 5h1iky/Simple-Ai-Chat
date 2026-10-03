@@ -3,6 +3,17 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      E3：`usesCleartextTraffic` 保持为 true。
+
+      审计把这个标记记为「明文外发 token」的风险，但本应用的核心用法之一就是
+      指向**用户自己的** OpenAI 兼容端点（Ollama / LM Studio / LocalAI 等局域网地址
+      通常是 `http://192.168.x.x:port`）。若在此处一刀切禁掉明文，
+      这些用户的配置会直接失效 —— 那是比风险本身更严重的功能回归。
+
+      因此改为「允许但明确告知」：network_security_config 声明策略，
+      设置页/编辑对话框在用户填入 http:// 地址时给出明文传输警告（见 SettingsActivity）。
+    -->
     <application
         android:name=".CrashReporter"
         android:allowBackup="false"
@@ -10,9 +21,10 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.CRtools"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".SplashActivity"
