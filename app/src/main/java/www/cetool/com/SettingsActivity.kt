@@ -414,6 +414,39 @@ class SettingsActivity : ComponentActivity() {
                 .remove(SettingsKeys.KEY_PROVIDER_AUTO_CREATED)
                 .apply()
         }
+        // B16：ai_config 原本只在 saveSettings() 里写，而切换模式/模型的
+        // persistProviderState() 只写 app_settings。于是
+        // 「自定义 → Kilo → 保存 → 切回自定义 → 按返回（不保存）→ 杀进程重开」
+        // 会得到 providerMode=CUSTOM 但 ai_config 仍是 Kilo 的地址（或 Zen 的 public key，
+        // 此时 isValid() 居然为真 → 请求静默打到 Zen 且不带必需的 x-session-id）。
+        // 这里让模式切换即时同步，两个来源就不再打架。
+        syncAiConfig()
+    }
+
+    /** 把当前活动条目（或预设模式的地址）写入 ai_config，保持与主界面读取侧一致 */
+    private fun syncAiConfig() {
+        val editor = getSharedPreferences(ApiConfig.PREFS_NAME, Context.MODE_PRIVATE).edit()
+        when (providerMode) {
+            SettingsKeys.PROVIDER_OPEN_KILO -> {
+                editor.putString(ApiConfig.KEY_URL, SettingsKeys.KILO_BASE_URL)
+                editor.putString(ApiConfig.KEY_KEY, "")
+                editor.putString(ApiConfig.KEY_MODEL, kiloModelOption)
+            }
+            SettingsKeys.PROVIDER_OPEN_CODE_ZEN -> {
+                editor.putString(ApiConfig.KEY_URL, SettingsKeys.ZEN_BASE_URL)
+                editor.putString(ApiConfig.KEY_KEY, SettingsKeys.ZEN_PUBLIC_KEY)
+                editor.putString(ApiConfig.KEY_MODEL, zenModelOption)
+            }
+            else -> {
+                val active = apiEntries.getOrNull(activeApiIndex)
+                if (active != null) {
+                    editor.putString(ApiConfig.KEY_URL, active.url)
+                    editor.putString(ApiConfig.KEY_KEY, active.key)
+                    editor.putString(ApiConfig.KEY_MODEL, active.model)
+                }
+            }
+        }
+        editor.apply()
     }
 
     // ─── 图片处理（与旧版一致：缩放 + Base64） ───
@@ -510,13 +543,7 @@ class SettingsActivity : ComponentActivity() {
         ConversationManager.setDefaultSystemPrompt(systemPromptText.trim())
 
         if (apiEntries.isNotEmpty() && activeApiIndex < apiEntries.size) {
-            val active = apiEntries[activeApiIndex]
-            getSharedPreferences(ApiConfig.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(ApiConfig.KEY_URL, active.url)
-                .putString(ApiConfig.KEY_KEY, active.key)
-                .putString(ApiConfig.KEY_MODEL, active.model)
-                .apply()
+            syncAiConfig()
         }
 
         Toast.makeText(this, getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
@@ -578,11 +605,21 @@ class SettingsActivity : ComponentActivity() {
                             entry = entry,
                             isActive = index == activeApiIndex,
                             onClick = { activeApiIndex = index },
+                            onEdit = {
+                                // B14：传下标才能走「原地更新」分支（此前永远是 null → 只能新增）
+                                apiDialogIndex = index
+                                showApiDialog = true
+                            },
                             onDelete = {
                                 apiEntries.removeAt(index)
-                                if (activeApiIndex >= apiEntries.size) {
-                                    activeApiIndex = (apiEntries.size - 1).coerceAtLeast(0)
-                                }
+                                // B15：原实现只处理「越界」，不处理「删除项在活动项之前」。
+                                // [A,B,C,D] 中 B 是当前项，删掉 A → 列表变 [B,C,D]，
+                                // activeApiIndex 仍是 1 → 高亮跑到 C，保存后会静默换端点/发错密钥。
+                                activeApiIndex = when {
+                                    index < activeApiIndex -> activeApiIndex - 1
+                                    index == activeApiIndex -> index.coerceAtMost((apiEntries.size - 1).coerceAtLeast(0))
+                                    else -> activeApiIndex
+                                }.coerceIn(0, (apiEntries.size - 1).coerceAtLeast(0))
                             }
                         )
                     }
@@ -1044,6 +1081,7 @@ class SettingsActivity : ComponentActivity() {
         entry: SettingsKeys.ApiEntry,
         isActive: Boolean,
         onClick: () -> Unit,
+        onEdit: () -> Unit,
         onDelete: () -> Unit
     ) {
         Surface(
@@ -1078,6 +1116,11 @@ class SettingsActivity : ComponentActivity() {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     )
+                }
+                // B14：原本只有「删除」，而 apiDialogIndex 全项目唯一的赋值点是 null
+                // → 已保存的条目无法编辑，改 URL/key 只能删了重建。这里接上编辑入口。
+                TextButton(onClick = onEdit) {
+                    Text(getString(R.string.settings_edit_api))
                 }
                 TextButton(onClick = onDelete) {
                     Text(getString(R.string.settings_delete), color = MaterialTheme.colorScheme.error)
@@ -1200,9 +1243,15 @@ private fun ApiEntryDialog(
             TextButton(onClick = {
                 if (label.isBlank()) {
                     Toast.makeText(context, context.getString(R.string.settings_label_empty), Toast.LENGTH_SHORT).show()
-                } else {
-                    onConfirm(label.trim(), url.trim(), key.trim(), model.trim())
+                    return@TextButton
                 }
+                // A2：免费模式不需要用户填地址（地址由预设提供），只校验已配置/自定义场景
+                val urlCheck = if (keyEnabled) ApiConfig.validateUrl(url) else null
+                if (urlCheck != null) {
+                    Toast.makeText(context, urlCheck, Toast.LENGTH_LONG).show()
+                    return@TextButton
+                }
+                onConfirm(label.trim(), url.trim(), key.trim(), model.trim())
             }) { Text(context.getString(R.string.btn_ok)) }
         },
         dismissButton = {

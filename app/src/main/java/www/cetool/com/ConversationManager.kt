@@ -539,6 +539,16 @@ object ConversationManager {
 
     fun setDefaultSystemPrompt(prompt: String) {
         if (!::prefs.isInitialized) return
+        // C7：原实现无条件保存用户当前系统提示词。而该值默认来自
+        // getString(R.string.default_system_prompt)，是**语言相关**的资源：
+        // 中文版是「禁止使用英文回复」、英文版是「Default output language: English」（语义相反）。
+        // 用户切语言后按一次保存，就把英文规则持久化进 prefs（已保存 pref 优先于资源），
+        // 切回中文也不会恢复。若内容与当前语言的默认值一致则不落库。
+        val localeDefault = runCatching { appContext.getString(R.string.default_system_prompt) }.getOrNull()
+        if (prompt.trim() == localeDefault?.trim()) {
+            prefs.edit().remove(KEY_SYSTEM_PROMPT).apply()
+            return
+        }
         prefs.edit().putString(KEY_SYSTEM_PROMPT, prompt).apply()
     }
 
