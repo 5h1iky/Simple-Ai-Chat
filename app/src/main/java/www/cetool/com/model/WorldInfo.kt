@@ -59,24 +59,22 @@ data class WorldEntry(
     /** @D 深度注入时的角色消息类型（system/user/assistant） */
     var injectRole: String? = null
 ) {
+    /**
+     * 关键词是否命中文本。
+     *
+     * B6：空关键词必须过滤掉 —— `compareText.contains("")` 恒为 true，
+     * 会让该条目匹配一切消息。老 better-in-old-data：
+     * `stripRegexDelimiters` 把 `//x` 剥成空串，正好触发这条。
+     */
+    private fun List<String>.usableKeywords(): List<String> =
+        map { it.trim() }.filter { it.isNotBlank() }
+
     fun matches(text: String): Boolean {
         if (!enabled) return false
         val compareText = if (caseSensitive) text else text.lowercase()
-        return keywords.any { kw ->
-            val keyword = if (caseSensitive) kw else kw.lowercase()
-            if (useRegex) {
-                try {
-                    val regex = if (caseSensitive) Regex(keyword) else Regex(keyword, RegexOption.IGNORE_CASE)
-                    regex.containsMatchIn(text)
-                } catch (_: Exception) { false }
-            } else if (wholeWords && keyword.isNotBlank() && !keyword.contains(' ') && !containsCjk(keyword)) {
-                // 酒馆 Match whole words（默认开）：单词边界匹配；
-                // 含中文的关键词不做边界匹配（中文无空格分词，酒馆文档亦建议中文关闭）
-                val escaped = Regex.escape(keyword)
-                Regex("(?<![\\p{L}\\p{N}_])$escaped(?![\\p{L}\\p{N}_])").containsMatchIn(compareText)
-            } else {
-                compareText.contains(keyword)
-            }
+        return keywords.usableKeywords().any { rawKw ->
+            val keyword = if (caseSensitive) rawKw else rawKw.lowercase()
+            matchOne(keyword, compareText)
         }
     }
 
@@ -84,20 +82,28 @@ data class WorldEntry(
     fun matchesSecondary(text: String): Boolean {
         if (secondaryKeys.isEmpty()) return false
         val compareText = if (caseSensitive) text else text.lowercase()
-        return secondaryKeys.any { kw ->
-            val keyword = if (caseSensitive) kw else kw.lowercase()
-            if (useRegex) {
-                try {
-                    val regex = if (caseSensitive) Regex(keyword) else Regex(keyword, RegexOption.IGNORE_CASE)
-                    regex.containsMatchIn(text)
-                } catch (_: Exception) { false }
-            } else if (wholeWords && keyword.isNotBlank() && !keyword.contains(' ') && !containsCjk(keyword)) {
-                val escaped = Regex.escape(keyword)
-                Regex("(?<![\\p{L}\\p{N}_])$escaped(?![\\p{L}\\p{N}_])").containsMatchIn(compareText)
-            } else {
-                compareText.contains(keyword)
-            }
+        return secondaryKeys.usableKeywords().any { rawKw ->
+            val keyword = if (caseSensitive) rawKw else rawKw.lowercase()
+            matchOne(keyword, text, compareText)
         }
+    }
+
+    /** 单条关键词匹配：正则 / 整词边界 / 子串，三种模式共用一条实现 */
+    private fun matchOne(keyword: String, compareText: String, rawText: String = compareText): Boolean {
+        if (useRegex) {
+            return try {
+                val target = if (caseSensitive) rawText else rawText.lowercase()
+                val regex = if (caseSensitive) Regex(keyword) else Regex(keyword, RegexOption.IGNORE_CASE)
+                regex.containsMatchIn(target)
+            } catch (_: Exception) { false }
+        }
+        if (wholeWords && keyword.isNotBlank() && !keyword.contains(' ') && !containsCjk(keyword)) {
+            // 酒馆 Match whole words（默认开）：单词边界匹配；
+            // 含中文的关键词不做边界匹配（中文无空格分词，酒馆文档亦建议中文关闭）
+            val escaped = Regex.escape(keyword)
+            return Regex("(?<![\\p{L}\\p{N}_])$escaped(?![\\p{L}\\p{N}_])").containsMatchIn(compareText)
+        }
+        return compareText.contains(keyword)
     }
 
     private fun containsCjk(s: String): Boolean = s.any { it.code in 0x4E00..0x9FFF || it.code in 0x3400..0x4DBF }

@@ -30,16 +30,25 @@ object WorldInfoImporter {
         data class Failure(val message: String) : ImportResult()
     }
 
-    /** 酒馆注入位置编号 → 本项目位置字符串（5/6/7 暂不支持，降级到最接近的位置，原始编号保留在 stPosition） */
+    /**
+     * 酒馆注入位置编号 → 本项目位置字符串。
+     *
+     * 酒馆真实枚举（`SillyTavern/public/scripts/world-info.js`）：
+     * `0 before / 1 after / 2 ANTop / 3 ANBottom / 4 atDepth / 5 EMTop / 6 EMBottom / 7 outlet`
+     *
+     * B2 修复：原实现把 AN 与 EM 两组搞反（注释「5/6=AN」本身即误解），
+     * 且把 7=Outlet 映射成 `at_depth` —— 酒馆里 Outlet 条目**从不自动注入**
+     * （只由 `{{outlet::名称}}` 手动拉取），这里映射为「不注入」的独立槽位。
+     */
     private val ST_POSITION_MAP = mapOf(
-        0 to "before_char_defs",
-        1 to "after_system_prompt",
-        2 to "before_example_messages",
-        3 to "after_example_messages",
-        4 to "at_depth",
-        5 to "after_system_prompt", // Top of AN（暂降级）
-        6 to "after_system_prompt", // Bottom of AN（暂降级）
-        7 to "at_depth"             // Outlet（暂降级）
+        0 to "before_char_defs",          // before char defs
+        1 to "after_system_prompt",       // after char defs
+        2 to "before_example_messages",   // AN top
+        3 to "after_example_messages",    // AN bottom
+        4 to "at_depth",                  // @D at depth
+        5 to "before_example_messages",   // EM top
+        6 to "after_example_messages",    // EM bottom
+        7 to "outlet"                     // B2：不自动注入（{{outlet::}} 手动拉取）
     )
 
     fun parse(json: String): ImportResult {
@@ -120,6 +129,92 @@ object WorldInfoImporter {
         return ImportResult.Success(info, warnings)
     }
 
+    /**
+     * 解析**角色卡内嵌世界书**（`data.character_book`）。
+     *
+     * B1：酒馆把角色卡自带的世界书放在 `data.character_book`（不是 `extensions.world_book`），
+     * 且其 `entries` 是**数组**，字段用 `keys` / `secondary_keys` / `constant` /
+     * `insertion_order` / `enable` 等命名 —— 与本项目自有数组格式的同名字段含义不同。
+     * 若直接走 `parseOwnEntry`（只读 `keywords`、读 `constantActive`），
+     * 每条都会变成「0 关键词 + 非常驻」，永远不可能触发。
+     */
+    fun parseCharacterBook(book: www.cetool.com.model.CharacterBook, fallbackName: String): ImportResult {
+        val warnings = mutableListOf<String>()
+        val entries = mutableListOf<WorldEntry>()
+
+        for ((index, el) in book.entries.withIndex()) {
+            val entry = parseCharacterBookEntry(el)
+            if (entry != null) entries.add(entry)
+            else warnings.add("第 ${index + 1} 个内嵌条目内容为空且无关键词，已跳过")
+        }
+
+        val info = WorldInfo(
+            id = UUID.randomUUID().toString().take(8),
+            name = book.name?.takeIf { it.isNotBlank() } ?: "$fallbackName 的世界书",
+            description = book.description ?: "",
+            enabled = true,
+            entries = entries
+        )
+        return ImportResult.Success(info, warnings)
+    }
+
+    private fun parseCharacterBookEntry(e: www.cetool.com.model.CharacterBookEntry): WorldEntry? {
+        val keywords = e.keys.map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+
+        // 内联正则：角色书允许 "/pattern/flags" 写法
+        var useRegex = e.use_regex
+        if (!useRegex && keywords.any { looksLikeRegex(it) }) useRegex = true
+        val finalKeywords = (if (useRegex) keywords.map { stripRegexDelimiters(it) } else keywords)
+            .map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+
+        val secondaryKeys = e.secondary_keys.map { it.trim() }.filter { it.isNotBlank() }
+        val finalSecondary = (if (useRegex) secondaryKeys.map { stripRegexDelimiters(it) } else secondaryKeys)
+            .map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+
+        // 角色书的开关字段是 enabled（部分生成器写作 disable）
+        val isEnabled = e.enabled
+
+        val content = e.content
+        if (content.isBlank() && finalKeywords.isEmpty() && !e.constant) return null
+
+        // B3：角色书条目的 position 是字符串 "before_char" / "after_char"，
+        // 直接落到 buildInjection 的 when 里没有匹配分支 → 条目会静默消失。
+        val (position, stPosition) = when (e.position?.trim()?.lowercase()) {
+            "before_char" -> "before_char_defs" to 0
+            "after_char" -> "after_system_prompt" to 1
+            else -> "after_system_prompt" to 1
+        }
+
+        val displayName = e.name?.takeIf { it.isNotBlank() }
+            ?: e.comment.takeIf { it.isNotBlank() }
+            ?: finalKeywords.firstOrNull()
+            ?: "未命名条目"
+
+        return WorldEntry(
+            id = UUID.randomUUID().toString().take(8),
+            name = displayName,
+            enabled = isEnabled,
+            priority = e.priority ?: e.insertion_order,
+            position = position,
+            content = content,
+            injectDepth = e.scan_depth ?: 4,
+            role = null,
+            keywords = finalKeywords,
+            useRegex = useRegex,
+            caseSensitive = e.case_sensitive ?: false,
+            scanDepth = e.scan_depth ?: 4,
+            constantActive = e.constant,
+            stPosition = stPosition,
+            wholeWords = e.match_whole_words ?: false,   // 内嵌角色书默认按子串匹配
+            secondaryKeys = finalSecondary.toMutableList(),
+            selective = e.selective,
+            selectiveLogic = e.selectiveLogic,
+            probability = 100,
+            useProbability = false,
+            comment = e.comment
+        )
+    }
+
     // ─── SillyTavern 条目解析（兼容新旧两代字段名） ──────────────────────────
 
     private fun parseStEntry(entry: JsonObject, uid: String, warnings: MutableList<String>): WorldEntry? {
@@ -135,6 +230,8 @@ object WorldInfoImporter {
         if (useRegex) {
             keywords = keywords.map { stripRegexDelimiters(it) }.toMutableList()
         }
+        // B5：次级键的原始值先取出，剥离时机与主键保持一致（见下方 secondaryKeys=）
+        val rawSecondaryKeys = strList(first(entry, "secondary_keys", "keysecondary", "secondaryKeys"))
 
         val content = str(entry.get("content")) ?: ""
         val comment = str(entry.get("comment")) ?: ""
@@ -169,7 +266,12 @@ object WorldInfoImporter {
             constantActive = bool(entry.get("constant"), false),
             stPosition = stPosition,
             wholeWords = bool(extOrTop(ext, entry, "match_whole_words", "matchWholeWords"), true),
-            secondaryKeys = strList(first(entry, "secondary_keys", "keysecondary", "secondaryKeys")).toMutableList(),
+            // B5：useRegex 为真时次级键也要剥 /.../ 定界符。
+            // 原实现原样保留 "/敏感词/"，引擎按正则编译后只会匹配字面的 /敏感词/，
+            // 配合默认 AND ANY 逻辑 → passesSelective 恒为 false → 条目永不激活。
+            secondaryKeys = rawSecondaryKeys
+                .let { if (useRegex) it.map { k -> stripRegexDelimiters(k) } else it }
+                .map { it.trim() }.filter { it.isNotBlank() }.toMutableList(),
             selective = bool(entry.get("selective"), false),
             selectiveLogic = int(entry.get("selectiveLogic"), 0),
             probability = probability,
@@ -207,8 +309,11 @@ object WorldInfoImporter {
         }
 
         val stPosition = int(entry.get("stPosition"), -1)
+        // 自有格式：keywords 里的 "/pat/" 也是内联正则写法
+        val ownUseRegex = bool(entry.get("useRegex"), false)
 
-        if (name.isBlank() && content.isBlank() && keywordsOf(entry).isEmpty()) {
+        val guardKeywords = keywordsOf(entry, ownUseRegex)
+        if (name.isBlank() && content.isBlank() && guardKeywords.isEmpty()) {
             warnings.add("存在内容为空且无关键词的条目，已跳过")
             return null
         }
@@ -222,8 +327,8 @@ object WorldInfoImporter {
             content = content,
             injectDepth = int(entry.get("injectDepth"), 4),
             role = str(entry.get("role")),
-            keywords = keywordsOf(entry).toMutableList(),
-            useRegex = bool(entry.get("useRegex"), false),
+            keywords = guardKeywords.toMutableList(),
+            useRegex = ownUseRegex || guardKeywords.any { looksLikeRegex(it) },
             caseSensitive = bool(entry.get("caseSensitive"), false),
             scanDepth = int(entry.get("scanDepth"), 4),
             constantActive = bool(entry.get("constantActive"), false),
@@ -291,14 +396,29 @@ object WorldInfoImporter {
         else -> def
     }
 
-    private fun strList(e: JsonElement?): List<String> = when {
-        e == null || e.isJsonNull -> emptyList()
-        e.isJsonArray -> e.asJsonArray.mapNotNull { str(it) }
-        else -> str(e)?.split(',', '，')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+    private fun strList(e: JsonElement?): List<String> {
+        // B6：数组分支原本 mapNotNull 后不再过滤空串（字符串分支是过滤了的），
+        // 数组里的 "" 会一路留到 WorldEntry.keywords → matches() 里 contains("") 恒真。
+        val out = when {
+            e == null || e.isJsonNull -> emptyList()
+            e.isJsonArray -> e.asJsonArray.mapNotNull { str(it) }
+            else -> str(e)?.split(',', '，') ?: emptyList()
+        }
+        return out.map { it.trim() }.filter { it.isNotBlank() }
     }
 
-    private fun keywordsOf(entry: JsonObject): List<String> {
-        return strList(entry.get("keywords")).map { stripRegexDelimiters(it) }
+    /**
+     * 自有数组格式的关键词。
+     *
+     * B6：原实现无条件 `stripRegexDelimiters`，会把字面关键词 `/api/v1` 改成 `api/v1`；
+     * 更糟的是 `//x` 被剥成空串（substring(1,1)）。现在只在确实识别为内联正则时才剥。
+     */
+    private fun keywordsOf(entry: JsonObject, useRegex: Boolean = false): List<String> {
+        val raw = strList(entry.get("keywords"))
+        val stripped = if (useRegex || raw.any { looksLikeRegex(it) }) {
+            raw.map { stripRegexDelimiters(it) }
+        } else raw
+        return stripped.map { it.trim() }.filter { it.isNotBlank() }
     }
 
     /**

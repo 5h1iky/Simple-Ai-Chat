@@ -63,13 +63,23 @@ object CharacterManager {
     }
 
     /**
-     * 检测角色卡内嵌世界书（SillyTavern 格式 extensions.world_book）：
-     * 用 WorldInfoImporter 解析建书，并把新书 id 写入 extensions["sachat_worldbook_id"]。
+     * 处理角色卡内嵌世界书（酒馆 `data.character_book`）。
+     *
+     * B1：原实现读的是 `extensions["world_book"]` —— 那不是酒馆的键，
+     * 合规的 v2/v3 卡全都写成 `data.character_book`，所以此功能从未触发过。
+     * 现在优先处理 `character_book`，保留对 `world_book` 的兼容（少数生成器仍用它）。
      */
     private fun processEmbeddedWorldBook(context: Context, card: TavernCard): TavernCard {
-        val wb = card.data.extensions["world_book"] ?: return card
-        if (!wb.isJsonObject) return card
-        val result = WorldInfoImporter.parse(wb.toString())
+        val book = card.data.character_book
+        val result = if (book != null && book.entries.isNotEmpty()) {
+            WorldInfoImporter.parseCharacterBook(book, card.data.name.ifBlank { "角色" })
+        } else {
+            val legacy = card.data.extensions["world_book"]
+            if (legacy != null && legacy.isJsonObject) {
+                WorldInfoImporter.parse(legacy.toString())
+            } else null
+        }
+
         if (result is WorldInfoImporter.ImportResult.Success && result.info.entries.isNotEmpty()) {
             val wid = WorldInfoManager.saveNew(context, result.info)
             val newExtensions = card.data.extensions.toMutableMap()

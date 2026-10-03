@@ -130,7 +130,10 @@ object WorldInfoEngine {
         var used = 0
         for (entry in ordered) {
             val cost = estimateTokens(entry.content) + 30
-            if (used + cost > maxTokens) break
+            // B7：酒馆语义是「逐条尝试、装不下就跳过该条继续试后续」。
+            // 原实现用 break，一旦遇到超预算的大条目就整体终止，
+            // 后面所有能装下的小条目全被丢弃（默认预算 1500，一条 2000 token 就废掉整本书）。
+            if (used + cost > maxTokens) continue
             result.add(entry)
             used += cost
         }
@@ -180,6 +183,13 @@ object WorldInfoEngine {
                 "before_example_messages" -> appendLine(beforeExamples, entry.content)
                 "after_example_messages" -> appendLine(afterExamples, entry.content)
                 "at_depth" -> atDepth.add(entry)
+                // B2：酒馆 Outlet（position 7）从不自动注入，只由 {{outlet::名称}} 手动拉取
+                "outlet" -> Unit
+                else -> {
+                    // B3：原实现没有 else 分支 —— 位置字符串不在白名单里的条目会
+                    // 静默从提示词里消失且无任何提示（character_book 的 "before_char" 即受害者）。
+                    appendLine(afterCharDefs, entry.content)
+                }
             }
         }
 
