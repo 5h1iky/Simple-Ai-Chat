@@ -446,6 +446,9 @@ private fun EntryEditDialog(
     var scanDepth by remember { mutableStateOf(entry.scanDepth.toString()) }
     var roleFilter by remember { mutableStateOf(entry.role ?: "") }
     var groupName by remember { mutableStateOf(entry.groupName) }
+    // B31：groupWeight 此前没有任何输入入口，而引擎现在用它决定同组胜者
+    // （同组互斥，权重高者被选中）。没有入口的话这个字段永远停在默认 100。
+    var groupWeight by remember { mutableStateOf(entry.groupWeight.toString()) }
     var enabled by remember { mutableStateOf(entry.enabled) }
     var constantActive by remember { mutableStateOf(entry.constantActive) }
     var useRegex by remember { mutableStateOf(entry.useRegex) }
@@ -473,6 +476,8 @@ private fun EntryEditDialog(
                 scanDepth = scanDepth.toIntOrNull() ?: 4,
                 role = roleFilter.trim().ifBlank { null },
                 groupName = groupName.trim(),
+                // B31：负数/0 无意义，钳制到 0..100（酒馆用 0-100 的百分比语义）
+                groupWeight = (groupWeight.toIntOrNull() ?: 100).coerceIn(0, 100),
                 constantActive = constantActive,
                 useRegex = useRegex,
                 caseSensitive = caseSensitive,
@@ -564,6 +569,17 @@ private fun EntryEditDialog(
                         OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text(context.getString(R.string.world_edit_role_filter)) }, modifier = Modifier.weight(1f))
                         OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text(context.getString(R.string.world_edit_group)) }, modifier = Modifier.weight(1f))
                     }
+                    // B31：填充分组名后才会用到权重（同组互斥，权重高者胜出）
+                    OutlinedTextField(
+                        value = groupWeight,
+                        onValueChange = { input ->
+                            groupWeight = input.filter { it.isDigit() }.take(3)
+                        },
+                        label = { Text(context.getString(R.string.world_edit_group_weight)) },
+                        supportingText = { Text(context.getString(R.string.world_edit_group_weight_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // B22：切换正则开关时同步重排关键词文本，避免旧分隔符残留导致往返损坏
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {

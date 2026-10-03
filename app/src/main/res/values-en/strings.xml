@@ -447,6 +447,8 @@
     <string name="world_edit_scan_depth">Scan depth</string>
     <string name="world_edit_role_filter">Role filter (user/assistant)</string>
     <string name="world_edit_group">Inclusion group</string>
+    <string name="world_edit_group_weight">Group weight</string>
+    <string name="world_edit_group_weight_hint">Only one entry per group is injected; higher weight wins (0-100)</string>
     <string name="world_edit_const">Constant</string>
     <string name="world_edit_regex">Regex</string>
     <string name="world_edit_case">Case</string>
