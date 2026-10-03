@@ -304,7 +304,6 @@
     <string name="settings_bg_fill">Original ratio tile</string>
     <string name="settings_pick_user_avatar">Pick my avatar</string>
     <string name="settings_pick_ai_avatar">Pick AI avatar</string>
-    <string name="settings_avatar_picked">%savatar selected</string>
     <string name="settings_save">Save settings</string>
     <string name="settings_saved_toast">Settings saved</string>
     <string name="settings_image_invalid">Invalid image</string>

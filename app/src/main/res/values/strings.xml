@@ -304,7 +304,6 @@
     <string name="settings_bg_fill">原比例填充</string>
     <string name="settings_pick_user_avatar">选择我的头像</string>
     <string name="settings_pick_ai_avatar">选择 AI 头像</string>
-    <string name="settings_avatar_picked">%s头像已选择</string>
     <string name="settings_save">保存设置</string>
     <string name="settings_saved_toast">设置已保存</string>
     <string name="settings_image_invalid">图片无效</string>
