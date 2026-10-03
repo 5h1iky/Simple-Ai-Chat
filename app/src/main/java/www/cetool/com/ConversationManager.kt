@@ -317,6 +317,10 @@ object ConversationManager {
             )
         }
 
+        // B20：Web 搜索此前是死功能（开关和 URL 只被读写，从不发请求）。
+        // 这里在发送前真正查一次，把结果作为独立的系统消息放进上下文。
+        injectWebSearchResult(appContext, inputText, historyItems)
+
         // Free Gateway: OpenKilo / OpenCode Zen 从 SharedPreferences 读取模式与模型选择并传给网络层
         val providerPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
         val providerMode = providerPrefs.getString(SettingsKeys.KEY_PROVIDER_MODE, SettingsKeys.PROVIDER_CUSTOM)
@@ -496,6 +500,39 @@ object ConversationManager {
      * {{char}} 的取值：角色卡名字优先，其次是 AI 显示名。
      * 冒险模式无单一主角时退回 AI 显示名。
      */
+    /**
+     * B20：Web 搜索注入。
+     *
+     * `KEY_WEB_SEARCH_URL` / `KEY_WEB_SEARCH_ENABLED` 此前只用来显示菜单文案，
+     * 从未发起过任何请求。这里真正接上：开关打开 + 配置了 URL 时，
+     * 用用户本条输入去搜一次，结果作为系统消息加入上下文（放在最前面）。
+     */
+    private fun injectWebSearchResult(
+        context: Context,
+        query: String,
+        historyItems: MutableList<www.cetool.com.network.MessageItem>
+    ) {
+        val sp = context.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
+        if (!sp.getBoolean(SettingsKeys.KEY_WEB_SEARCH_ENABLED, false)) return
+        val url = sp.getString(SettingsKeys.KEY_WEB_SEARCH_URL, "")?.trim().orEmpty()
+        if (url.isBlank() || query.isBlank()) return
+
+        val model = context.getSharedPreferences(ApiConfig.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(ApiConfig.KEY_MODEL, "")?.trim().orEmpty().ifBlank { null }
+
+        val result = runCatching { www.cetool.com.network.WebSearchClient.search(url, model, query) }
+            .getOrNull() ?: return
+        val text = result.getOrNull()?.takeIf { it.isNotBlank() } ?: return
+
+        historyItems.add(
+            0,
+            www.cetool.com.network.MessageItem.text(
+                "system",
+                "[Web Search 结果 · 供参考]\n$text"
+            )
+        )
+    }
+
     /**
      * 按**实际字节头**判断图片 MIME（B11）。
      *

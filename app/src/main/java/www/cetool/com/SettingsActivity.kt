@@ -452,59 +452,59 @@ class SettingsActivity : ComponentActivity() {
     // ─── 图片处理（与旧版一致：缩放 + Base64） ───
 
     private fun handleBgImagePicked(uri: Uri) {
-        try {
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            if (bitmap == null) { Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show(); return }
-
-            val maxSize = 1024
-            val scale = Math.min(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height).coerceAtMost(1f)
-            val scaled = if (scale < 1f) Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true) else bitmap
-
-            val outputStream = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-            bgImageBase64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
-            outputStream.close()
-
-            val cursor = contentResolver.query(uri, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (idx >= 0) bgImageName = it.getString(idx)
-                }
-            }
-            Toast.makeText(this, getString(R.string.settings_bg_picked), Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, getString(R.string.settings_image_failed), Toast.LENGTH_SHORT).show()
+        // D3：全尺寸解码 + 抓不住 OOM → 选高像素背景图即崩。改为采样解码。
+        val bitmap = www.cetool.com.util.ImageDecoder.decode(this, uri, maxEdge = 1024)
+        if (bitmap == null) {
+            Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show()
+            return
         }
+        val bytes = www.cetool.com.util.ImageDecoder.compress(
+            bitmap, Bitmap.CompressFormat.PNG, 100, maxEdge = 1024
+        )
+        if (bytes == null) {
+            Toast.makeText(this, getString(R.string.settings_image_failed), Toast.LENGTH_SHORT).show()
+            return
+        }
+        bgImageBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) bgImageName = it.getString(idx)
+            }
+        }
+        Toast.makeText(this, getString(R.string.settings_bg_picked), Toast.LENGTH_SHORT).show()
     }
 
     private fun handleUserAvatarPicked(uri: Uri, isAi: Boolean) {
-        try {
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            if (bitmap == null) { Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show(); return }
-
-            val maxSize = 256
-            val scale = Math.min(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height).coerceAtMost(1f)
-            val scaled = if (scale < 1f) Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true) else bitmap
-
-            val outputStream = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-            val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
-            outputStream.close()
-
-            if (isAi) {
-                aiAvatarBase64 = base64
-            } else {
-                userAvatarBase64 = base64
-            }
-            Toast.makeText(this, getString(R.string.settings_avatar_picked, if (isAi) "AI " else "我的"), Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, getString(R.string.settings_avatar_failed), Toast.LENGTH_SHORT).show()
+        // D3：同上，改为采样解码 + 捕获 OOM
+        val bitmap = www.cetool.com.util.ImageDecoder.decode(this, uri, maxEdge = 256)
+        if (bitmap == null) {
+            Toast.makeText(this, getString(R.string.settings_image_invalid), Toast.LENGTH_SHORT).show()
+            return
         }
+        val bytes = www.cetool.com.util.ImageDecoder.compress(
+            bitmap, Bitmap.CompressFormat.JPEG, 80, maxEdge = 256
+        )
+        if (bytes == null) {
+            Toast.makeText(this, getString(R.string.settings_avatar_failed), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+        if (isAi) {
+            aiAvatarBase64 = base64
+        } else {
+            userAvatarBase64 = base64
+        }
+        // E7：原实现把硬编码的 "我的"/"AI " 拼进 "%s头像已选择" → 英文界面显示 "我的avatar selected"。
+        // 改用两条完整的 resource string，各自带正确语言的主语。
+        Toast.makeText(
+            this,
+            getString(if (isAi) R.string.settings_ai_avatar_picked else R.string.settings_my_avatar_picked),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun saveSettings() {
@@ -827,13 +827,30 @@ class SettingsActivity : ComponentActivity() {
                     onClick = { userAvatarPickerLauncher.launch(arrayOf("image/*")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
-                ) { Text(if (userAvatarBase64 != null) getString(R.string.settings_avatar_picked, "我的") else getString(R.string.settings_pick_user_avatar)) }
+                ) {
+                    // E7：原来把硬编码的 "我的"/"AI " 拼进 "%s头像已选择"，英文界面会显示 "我的avatar selected"
+                    Text(
+                        if (userAvatarBase64 != null) {
+                            stringResource(R.string.settings_my_avatar_picked)
+                        } else {
+                            stringResource(R.string.settings_pick_user_avatar)
+                        }
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = { aiAvatarPickerLauncher.launch(arrayOf("image/*")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
-                ) { Text(if (aiAvatarBase64 != null) getString(R.string.settings_avatar_picked, "AI ") else getString(R.string.settings_pick_ai_avatar)) }
+                ) {
+                    Text(
+                        if (aiAvatarBase64 != null) {
+                            stringResource(R.string.settings_ai_avatar_picked)
+                        } else {
+                            stringResource(R.string.settings_pick_ai_avatar)
+                        }
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))

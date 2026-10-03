@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,8 +31,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import www.cetool.com.R
 
 /**
  * 可折叠区块（对应 1.3 的系统提示词折叠块 / 思考折叠块）。
@@ -84,7 +88,8 @@ fun FoldableSection(
             }
             Icon(
                 imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "收起" else "展开",
+                // E6：全项目唯一漏网硬编码中文 —— 英文模式 TalkBack 会念中文
+                contentDescription = stringResource(if (expanded) R.string.collapse else R.string.expand),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.rotate(if (expanded) 180f else 0f)
             )
@@ -122,7 +127,7 @@ fun SectionCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(Modifier.width(0.dp))
+            // E14：这里的 Spacer(Modifier.width(0.dp)) 是无效占位，Column 下不产生任何效果
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 content()
             }
@@ -132,20 +137,25 @@ fun SectionCard(
 
 /**
  * 标签行（角色身份标签、关键词 chips）
+ *
+ * B24：原实现 `take(8)` 硬截断且从不传 onTagClick → 打错的标签永久留在卡里，
+ * 超过 8 个的完全不可见也无法管理。现在全部标签都显示，并可逐个删除。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagRow(
     tags: List<String>,
     modifier: Modifier = Modifier,
-    onTagClick: ((String) -> Unit)? = null
+    onTagClick: ((String) -> Unit)? = null,
+    onRemove: ((String) -> Unit)? = null
 ) {
     if (tags.isEmpty()) return
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        tags.take(8).forEach { tag ->
+        tags.forEach { tag ->
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.primaryContainer,
@@ -153,14 +163,30 @@ fun TagRow(
                     Modifier.clickable { onTagClick(tag) }
                 } else Modifier
             ) {
-                Text(
-                    text = tag,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                )
+                ) {
+                    Text(
+                        text = tag,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (onRemove != null) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.delete),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clickable { onRemove(tag) }
+                        )
+                    }
+                }
             }
         }
     }

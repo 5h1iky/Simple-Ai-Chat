@@ -164,6 +164,8 @@ class WorldInfoEditActivity : ComponentActivity() {
 private fun WorldInfoEditScreen(
     name: String,
     description: String,
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
     entries: List<WorldEntry>,
     onNameChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -174,6 +176,8 @@ private fun WorldInfoEditScreen(
     onSave: () -> Unit
 ) {
     var editingIndex by remember { mutableStateOf<Int?>(null) }
+    // B23：长按条目不再立即删除，先弹出确认框（可滚动列表里长按极易误触）
+    var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
 
     Scaffold(
         topBar = {
@@ -212,6 +216,23 @@ private fun WorldInfoEditScreen(
                     label = { Text(stringResource(R.string.world_edit_desc)) },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(4.dp))
+                // B4：书级启用开关（WorldInfo.enabled；停用的书引擎直接跳过）
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.world_edit_enabled_book),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (!enabled) {
+                    Text(
+                        text = stringResource(R.string.world_edit_book_disabled_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
 
             FoldableSection(
@@ -241,7 +262,8 @@ private fun WorldInfoEditScreen(
                     EntryCard(
                         entry = entry,
                         onClick = { editingIndex = index },
-                        onLongClick = { onDeleteEntry(index) }
+                        // B23：长按只请求删除，确认后再真正删除，避免滚动时误触
+                        onLongClick = { pendingDeleteIndex = index }
                     )
                 }
             }
@@ -262,7 +284,38 @@ private fun WorldInfoEditScreen(
             )
         }
     }
+
+    pendingDeleteIndex?.let { index ->
+        val entry = entries.getOrNull(index)
+        AlertDialog(
+            onDismissRequest = { pendingDeleteIndex = null },
+            title = { Text(stringResource(R.string.world_edit_delete_entry_title)) },
+            text = {
+                val ctx = LocalContext.current
+                val displayName = entry?.let { entryDisplayName(ctx, it) } ?: ""
+                Text(stringResource(R.string.confirm_delete_msg, displayName))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteEntry(index)
+                    // 同时关掉可能正开着的条目编辑弹窗，避免下标错位后保存到别的条目
+                    if (editingIndex == index) editingIndex = null
+                    pendingDeleteIndex = null
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteIndex = null }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
+    }
 }
+
+/**
+ * 条目显示名：C5 —— 本地化的「未命名条目」只用于显示，绝不写回数据，
+ * 数据里空名就保持空串（否则切语言后残留旧语言假名，且用户永远清不掉）。
+ */
+private fun entryDisplayName(context: android.content.Context, entry: WorldEntry): String =
+    entry.name.trim().ifBlank { context.getString(R.string.world_edit_unnamed_entry) }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -273,12 +326,17 @@ private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () ->
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        // B4：条目停用 → 卡片整体压暗，和启用条目区分开
+        color = if (entry.enabled) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)
+        }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = entry.name.ifBlank { context.getString(R.string.world_edit_unnamed_entry) },
+                    text = entryDisplayName(context, entry),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -288,6 +346,15 @@ private fun EntryCard(entry: WorldEntry, onClick: () -> Unit, onLongClick: () ->
                     text = context.getString(R.string.world_edit_entry_meta, positionLabel(context, entry.position), entry.priority),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // B4：停用条目标识（酒馆 disable:true 导入的条目此前无处可见）
+            if (!entry.enabled) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = context.getString(R.string.world_edit_disabled_badge),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
             if (entry.keywords.isNotEmpty()) {
@@ -318,8 +385,8 @@ private fun EntryEditDialog(
 ) {
     val context = LocalContext.current
     var name by remember { mutableStateOf(entry.name) }
-    var keywords by remember { mutableStateOf(entry.keywords.joinToString(", ")) }
-    var secondaryKeys by remember { mutableStateOf(entry.secondaryKeys.joinToString(", ")) }
+    var keywords by remember { mutableStateOf(joinKeywords(entry.keywords, entry.useRegex)) }
+    var secondaryKeys by remember { mutableStateOf(joinKeywords(entry.secondaryKeys, entry.useRegex)) }
     var content by remember { mutableStateOf(entry.content) }
     var position by remember { mutableStateOf(entry.position) }
     var injectDepth by remember { mutableStateOf(entry.injectDepth.toString()) }
@@ -328,6 +395,7 @@ private fun EntryEditDialog(
     var scanDepth by remember { mutableStateOf(entry.scanDepth.toString()) }
     var roleFilter by remember { mutableStateOf(entry.role ?: "") }
     var groupName by remember { mutableStateOf(entry.groupName) }
+    var enabled by remember { mutableStateOf(entry.enabled) }
     var constantActive by remember { mutableStateOf(entry.constantActive) }
     var useRegex by remember { mutableStateOf(entry.useRegex) }
     var caseSensitive by remember { mutableStateOf(entry.caseSensitive) }
@@ -339,9 +407,13 @@ private fun EntryEditDialog(
     fun save() {
         onSave(
             entry.copy(
-                name = name.trim().ifBlank { context.getString(R.string.world_edit_unnamed_entry) },
-                keywords = splitKeywords(keywords),
-                secondaryKeys = splitKeywords(secondaryKeys),
+                // C5：空名就存空串，本地化的「未命名条目」只在显示层兜底
+                name = name.trim(),
+                // B4：条目级启用开关
+                enabled = enabled,
+                // B22：正则关键词可含逗号（a{1,3}、\d{2,4}），正则模式下只按换行切
+                keywords = splitKeywords(keywords, useRegex),
+                secondaryKeys = splitKeywords(secondaryKeys, useRegex),
                 content = content,
                 position = position,
                 injectDepth = injectDepth.toIntOrNull() ?: 4,
@@ -401,7 +473,21 @@ private fun EntryEditDialog(
                 ) {
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(context.getString(R.string.world_edit_name)) }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = keywords, onValueChange = { keywords = it }, label = { Text(context.getString(R.string.world_edit_keywords)) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = keywords,
+                        onValueChange = { keywords = it },
+                        label = { Text(context.getString(if (useRegex) R.string.world_edit_keywords_regex else R.string.world_edit_keywords)) },
+                        minLines = if (useRegex) 3 else 1,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (useRegex) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = context.getString(R.string.world_edit_keywords_regex_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = secondaryKeys, onValueChange = { secondaryKeys = it }, label = { Text(context.getString(R.string.world_edit_secondary_keys)) }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
@@ -428,14 +514,28 @@ private fun EntryEditDialog(
                         OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text(context.getString(R.string.world_edit_group)) }, modifier = Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ToggleLabel(context.getString(R.string.world_edit_const), constantActive, { constantActive = it }, Modifier.weight(1f))
                         ToggleLabel(context.getString(R.string.world_edit_regex), useRegex, { useRegex = it }, Modifier.weight(1f))
                         ToggleLabel(context.getString(R.string.world_edit_case), caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_selective), selective, { selective = it }, Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ToggleLabel(context.getString(R.string.world_edit_whole_words), wholeWords, { wholeWords = it }, Modifier.weight(1f))
-                        ToggleLabel(context.getString(R.string.world_edit_selective), selective, { selective = it }, Modifier.weight(1f))
+                        ToggleLabel(context.getString(R.string.world_edit_const), constantActive, { constantActive = it }, Modifier.weight(1f))
                         ToggleLabel(context.getString(R.string.world_edit_use_prob), useProbability, { useProbability = it }, Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(8.dp))
+                    // B4：条目级启用开关（WorldEntry.enabled；停用的条目引擎直接跳过）
+                    Column {
+                        ToggleLabel(context.getString(R.string.world_edit_enabled_entry), enabled, { enabled = it }, Modifier.fillMaxWidth())
+                        if (!enabled) {
+                            Text(
+                                text = context.getString(R.string.world_edit_entry_disabled_note),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     Spacer(Modifier.height(16.dp))
                 }
@@ -476,9 +576,25 @@ private fun ToggleLabel(
     }
 }
 
-private fun splitKeywords(text: String): MutableList<String> {
-    return text.split(',', '，', '、', '\n')
-        .map { it.trim() }
+/**
+ * 关键词 → 编辑框文本。
+ *
+ * B22：正则模式下关键词里允许出现逗号（`a{1,3}`、`\d{2,4}`、`(foo|bar){2,3}`），
+ * 若按逗号 join 再按逗号 split，一条键会被永久切成两条。所以正则模式一律「一行一个」。
+ * 导入侧（WorldInfoImporter.stripRegexDelimiters）已剥掉 /.../ 定界符，这里不再加回，
+ * 保证 显示 → 保存 → 再显示 完全等幂。
+ */
+private fun joinKeywords(list: List<String>, regexMode: Boolean): String =
+    if (regexMode) list.joinToString("\n") else list.joinToString(", ")
+
+/**
+ * 编辑框文本 → 关键词列表。
+ * 非正则：逗号 / 中文逗号 / 顿号 / 换行 都算分隔符（保持旧行为）。
+ * 正则：只按换行切，逐行 trim 后去空行，行内逗号原样保留。
+ */
+private fun splitKeywords(text: String, regexMode: Boolean): MutableList<String> {
+    val raw = if (regexMode) text.split('\n') else text.split(',', '，', '、', '\n')
+    return raw.map { it.trim() }
         .filter { it.isNotBlank() }
         .toMutableList()
 }

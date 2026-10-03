@@ -156,24 +156,25 @@ class CharacterEditActivity : ComponentActivity() {
             return
         }
 
+        val rawFields = snapshotCharacterFields(state)
         val fields = CharacterFields(
-            age = state.age.trim(), gender = state.gender.trim(), race = state.race.trim(),
-            birthplace = state.birthplace.trim(), occupation = state.occupation.trim(),
-            socialClass = state.socialClass.trim(),
-            identityTags = state.identityTags.toMutableList(),
-            heightBuild = state.heightBuild.trim(), iconicFeatures = state.iconicFeatures.trim(),
-            clothingStyle = state.clothingStyle.trim(), overallVibe = state.overallVibe.trim(),
-            externalPersonality = state.externalPersonality.trim(),
-            internalPersonality = state.internalPersonality.trim(),
-            coreDesire = state.coreDesire.trim(), fearWeakness = state.fearWeakness.trim(),
-            moralValues = state.moralValues.trim(), quirk = state.quirk.trim(),
-            skills = state.skills.trim(), backgroundStory = state.backgroundStory.trim(),
-            relationships = state.relationships.trim(), speakingStyle = state.speakingStyle.trim(),
-            typicalReactions = state.typicalReactions.trim(),
-            userRelationType = state.userRelationType.trim(),
-            userInteractionModel = state.userInteractionModel.trim(),
-            userRelationBottomLine = state.userRelationBottomLine.trim(),
-            keyEvents = state.keyEvents.trim()
+            age = rawFields.age.trim(), gender = rawFields.gender.trim(), race = rawFields.race.trim(),
+            birthplace = rawFields.birthplace.trim(), occupation = rawFields.occupation.trim(),
+            socialClass = rawFields.socialClass.trim(),
+            identityTags = rawFields.identityTags.map { it.trim() }.filter { it.isNotEmpty() }.toMutableList(),
+            heightBuild = rawFields.heightBuild.trim(), iconicFeatures = rawFields.iconicFeatures.trim(),
+            clothingStyle = rawFields.clothingStyle.trim(), overallVibe = rawFields.overallVibe.trim(),
+            externalPersonality = rawFields.externalPersonality.trim(),
+            internalPersonality = rawFields.internalPersonality.trim(),
+            coreDesire = rawFields.coreDesire.trim(), fearWeakness = rawFields.fearWeakness.trim(),
+            moralValues = rawFields.moralValues.trim(), quirk = rawFields.quirk.trim(),
+            skills = rawFields.skills.trim(), backgroundStory = rawFields.backgroundStory.trim(),
+            relationships = rawFields.relationships.trim(), speakingStyle = rawFields.speakingStyle.trim(),
+            typicalReactions = rawFields.typicalReactions.trim(),
+            userRelationType = rawFields.userRelationType.trim(),
+            userInteractionModel = rawFields.userInteractionModel.trim(),
+            userRelationBottomLine = rawFields.userRelationBottomLine.trim(),
+            keyEvents = rawFields.keyEvents.trim()
         )
 
         val description = state.description.trim().ifBlank {
@@ -223,6 +224,22 @@ class CharacterEditActivity : ComponentActivity() {
         const val EXTRA_IS_EDIT = "is_edit"
     }
 }
+
+/** 把当前编辑状态快照成 CharacterFields（预览与保存共用，避免两处定义漂移） */
+private fun snapshotCharacterFields(state: CharacterEditState) = CharacterFields(
+    age = state.age, gender = state.gender, race = state.race,
+    birthplace = state.birthplace, occupation = state.occupation, socialClass = state.socialClass,
+    identityTags = state.identityTags.toMutableList(),
+    heightBuild = state.heightBuild, iconicFeatures = state.iconicFeatures,
+    clothingStyle = state.clothingStyle, overallVibe = state.overallVibe,
+    externalPersonality = state.externalPersonality, internalPersonality = state.internalPersonality,
+    coreDesire = state.coreDesire, fearWeakness = state.fearWeakness,
+    moralValues = state.moralValues, quirk = state.quirk,
+    skills = state.skills, backgroundStory = state.backgroundStory, relationships = state.relationships,
+    speakingStyle = state.speakingStyle, typicalReactions = state.typicalReactions,
+    userRelationType = state.userRelationType, userInteractionModel = state.userInteractionModel,
+    userRelationBottomLine = state.userRelationBottomLine, keyEvents = state.keyEvents
+)
 
 /** 编辑表单状态（全部为 Compose state，便于双向绑定） */
 class CharacterEditState {
@@ -275,23 +292,19 @@ private fun CharacterEditScreen(
     var tagInput by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    // 编译预览用
-    val compiled = remember(state) {
-        val fields = CharacterFields(
-            age = state.age, gender = state.gender, race = state.race,
-            birthplace = state.birthplace, occupation = state.occupation, socialClass = state.socialClass,
-            identityTags = state.identityTags.toMutableList(),
-            heightBuild = state.heightBuild, iconicFeatures = state.iconicFeatures,
-            clothingStyle = state.clothingStyle, overallVibe = state.overallVibe,
-            externalPersonality = state.externalPersonality, internalPersonality = state.internalPersonality,
-            coreDesire = state.coreDesire, fearWeakness = state.fearWeakness,
-            moralValues = state.moralValues, quirk = state.quirk,
-            skills = state.skills, backgroundStory = state.backgroundStory, relationships = state.relationships,
-            speakingStyle = state.speakingStyle, typicalReactions = state.typicalReactions,
-            userRelationType = state.userRelationType, userInteractionModel = state.userInteractionModel,
-            userRelationBottomLine = state.userRelationBottomLine, keyEvents = state.keyEvents
+    // 编译预览用。
+    //
+    // B25：原实现是 `remember(state) { ... }` —— state 是 onCreate 里创建的**同一个对象实例**，
+    // remember(key) 用 equals 比较永远相等 → lambda 只执行一次，预览永远是 Activity 创建时的内容
+    // （新建角色时永远是空白）。这里改成把**实际读取的字段**作为 key，
+    // 每次编辑都会重新编译预览。
+    val previewName = state.name
+    val previewFields = snapshotCharacterFields(state)
+    val compiled = remember(previewName, previewFields) {
+        CharacterCompiler.compileMarkdown(
+            previewName.ifBlank { context.getString(R.string.char_edit_unnamed) },
+            previewFields
         )
-        CharacterCompiler.compileMarkdown(state.name.ifBlank { context.getString(R.string.char_edit_unnamed) }, fields)
     }
 
     Scaffold(
@@ -357,7 +370,15 @@ private fun CharacterEditScreen(
 
                 SectionCard(context.getString(R.string.field_identity_tags)) {
                     if (state.identityTags.isNotEmpty()) {
-                        TagRow(tags = state.identityTags)
+                        // B24：原本未传 onTagClick 且 TagRow 硬截 take(8)
+                        // → 打错的标签永久留在卡里，超过 8 个的完全不可见也无法管理
+                        TagRow(
+                            tags = state.identityTags,
+                            onRemove = { removed ->
+                                state.identityTags =
+                                    (state.identityTags - removed).toMutableList()
+                            }
+                        )
                         Spacer(Modifier.height(8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {

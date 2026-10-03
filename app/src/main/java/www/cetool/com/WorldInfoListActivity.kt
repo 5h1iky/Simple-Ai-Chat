@@ -256,14 +256,30 @@ private fun WorldInfoListScreen(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = info.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                // 世界书不在本页启用：提示用户在对话侧（长按对话 → 世界书设置）启用
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        // C5：列表显示层兜底，不把本地化假名写进数据
+                                        text = info.name.trim().ifBlank { stringResource(R.string.world_edit_unnamed_entry) },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        // B4：停用的世界书标题压暗，视觉上一眼可辨
+                                        color = if (info.enabled) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        }
+                                    )
+                                    if (!info.enabled) {
+                                        Text(
+                                            text = stringResource(R.string.world_list_disabled),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                // B23：该行长弹出的实际是 编辑/导出/删除 菜单，文案随之纠正
                                 Text(
                                     text = stringResource(R.string.world_list_longpress_hint),
                                     style = MaterialTheme.typography.labelSmall,
@@ -314,7 +330,7 @@ private fun WorldInfoListScreen(
     pendingDelete?.let { info ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text(info.name) },
+            title = { Text(info.name.trim().ifBlank { stringResource(R.string.world_edit_unnamed_entry) }) },
             text = {
                 Column {
                     TextButton(onClick = {
