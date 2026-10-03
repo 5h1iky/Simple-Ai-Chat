@@ -54,6 +54,9 @@ object CharacterManager {
 
     fun save(context: Context, json: String): String? {
         val card = TavernCardImporter.parse(json).getOrNull() ?: return null
+        // E14：空名卡此前可以导入成功（isVaild 从未被调用），
+        // 列表里会出现一张无法辨认的卡。这里统一拦住。
+        if (!card.data.isVaild()) return null
         val id = UUID.randomUUID().toString().take(8)
         // 角色卡内嵌世界书（酒馆 extensions.world_book）：自动建书并绑定
         val finalCard = processEmbeddedWorldBook(context, card)

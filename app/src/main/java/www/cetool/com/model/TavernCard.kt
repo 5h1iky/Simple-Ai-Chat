@@ -77,6 +77,13 @@ data class TavernCardData(
     // ─── 角色卡内嵌世界书（B1：酒馆规范字段是 data.character_book） ───
     val character_book: CharacterBook? = null
 ) {
+    /**
+     * 卡片是否有效。
+     *
+     * E14：这个方法此前**从未被任何地方调用** —— 空名卡可以一路导入成功，
+     * 列表里出现一张没有名字的卡，且无法在界面上辨认。
+     * 现在由 CharacterManager.save / 各导入入口统一校验。
+     */
     fun isVaild(): Boolean = name.isNotBlank()
 
     // ─── 结构化字段（D1 决策：存 Tavern 规范预留的 extensions，旧卡零迁移、生态兼容） ───

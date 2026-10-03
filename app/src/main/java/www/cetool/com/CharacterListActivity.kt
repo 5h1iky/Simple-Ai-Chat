@@ -171,6 +171,11 @@ class CharacterListActivity : ComponentActivity() {
                 Toast.makeText(this, getString(R.string.char_list_invalid), Toast.LENGTH_LONG).show()
                 return
             }
+            // E14：空名卡此前能导入成功，列表里出现无法辨认的条目
+            if (!card.data.isVaild()) {
+                Toast.makeText(this, getString(R.string.char_list_name_missing), Toast.LENGTH_LONG).show()
+                return
+            }
             // 用「规范化的 JSON」落库，保证后续编辑/导出拿到干净数据
             val json = TavernCardImporter.export(card)
             val id = CharacterManager.save(this, json) ?: run {
@@ -212,7 +217,17 @@ private fun CharacterListScreen(
     refreshTick: Int,
     onRefresh: () -> Unit = {}
 ) {
-    val characters = remember(refreshTick) { loadCharacters() }
+    // D4：原实现在组合期直接 `loadCharacters()` —— CharacterManager.list() 会逐个读取
+    // 角色卡 JSON 并解析（含 base64 头像），卡片一多就会卡住首帧。
+    // 改为在 IO 线程加载，加载完成后发布结果（初次扫描期间列表显示为空）。
+    val characters by androidx.compose.runtime.produceState(
+        initialValue = emptyList<CharacterInfo>(),
+        refreshTick
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { loadCharacters() }.getOrDefault(emptyList())
+        }
+    }
     var pendingDelete by remember { mutableStateOf<CharacterInfo?>(null) }
 
     Scaffold(

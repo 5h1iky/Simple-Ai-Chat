@@ -1680,6 +1680,11 @@ class ChatActivity : ComponentActivity() {
             }
 
             val tavernCard = card.getOrNull() ?: return
+            // E14：空名卡此前能导入成功（isVaild 从未被调用）
+            if (!tavernCard.data.isVaild()) {
+                Toast.makeText(this, getString(R.string.char_list_name_missing), Toast.LENGTH_LONG).show()
+                return
+            }
             importPendingName = tavernCard.data.name
             importPendingDesc = tavernCard.data.description.take(200)
             // 落库用规范化 JSON（PNG/v1 卡也能得到干净数据）

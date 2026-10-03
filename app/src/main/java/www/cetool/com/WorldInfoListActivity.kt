@@ -210,8 +210,26 @@ private fun WorldInfoListScreen(
     onImport: () -> Unit,
     isManageMode: Boolean
 ) {
-    val worldInfos = remember(tick) { loadWorldInfos() }
-    val brokenCountByWorld = remember(tick) { loadBrokenCounts(worldInfos) }
+    // D4：原实现在组合期直接调用 loadWorldInfos() / loadBrokenCounts()，两者都会逐本
+    // 读盘 + 解析 JSON（brokenCounts 还会把每本书完整 load 一遍），世界书多了会卡首帧。
+    // 改为在 IO 线程完成「列表 + 损坏计数」的加载后一次性发布。
+    data class ListData(
+        val infos: List<WorldInfoSummary>,
+        val brokenCounts: Map<String, Int>
+    )
+    val listData by androidx.compose.runtime.produceState(
+        initialValue = ListData(emptyList(), emptyMap()),
+        tick
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val infos = loadWorldInfos()
+                ListData(infos, loadBrokenCounts(infos))
+            }.getOrDefault(ListData(emptyList(), emptyMap()))
+        }
+    }
+    val worldInfos = listData.infos
+    val brokenCountByWorld = listData.brokenCounts
     // 各世界书被哪些对话启用（长按对话 → 世界书设置 可自由配置，支持多本）
     val convTitlesByWorld = remember(tick) {
         val map = mutableMapOf<String, MutableList<String>>()

@@ -256,6 +256,12 @@ class SettingsActivity : ComponentActivity() {
                 .apply()
         }
 
+        // E13①：fallbackModels 的初值写死了 PROVIDER_OPEN_KILO，且只在 loadFreeModels()
+        // 里才按当前模式刷新 —— 于是在 Zen 模式下首帧会拿 Kilo 的兜底模型列表当选项，
+        // 用户可能选到一个 Kilo 专属模型名去请求 Zen。
+        // 这里在模式恢复后立刻按真实模式重算兜底表。
+        fallbackModels = ModelCatalog.fallbackModels(providerMode)
+
         if (providerMode == SettingsKeys.PROVIDER_CUSTOM) return
 
         // Free Gateway: OpenKilo / OpenCode Zen 免费模式下恢复模型选择
@@ -324,7 +330,14 @@ class SettingsActivity : ComponentActivity() {
 
     /** 拉取当前模式的模型列表（打开选择器时调用；forceRefresh 用于「刷新」按钮） */
     private fun loadFreeModels(forceRefresh: Boolean = false) {
-        if (loadingModels) return
+        // E13②：原实现直接 `if (loadingModels) return` —— 用户在加载中点「刷新列表」
+        // 会**完全无反应**，看起来像按钮坏了。这里明确提示正在加载。
+        if (loadingModels) {
+            if (forceRefresh) {
+                Toast.makeText(this, getString(R.string.model_loading), Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         val mode = providerMode
         // 同步刷新兜底值（纯内存常量映射，无 IO）
         fallbackModels = ModelCatalog.fallbackModels(mode)
@@ -390,7 +403,9 @@ class SettingsActivity : ComponentActivity() {
             autoCreatedByPreset = true
         } else {
             val entry = apiEntries[activeApiIndex]
-            apiEntries[activeApiIndex] = entry.copy(url = url, key = key, model = model)
+            // E13③：原实现只覆盖 url/key/model，把新 label 丢掉了 ——
+            // 于是切换到预设后，条目名仍显示用户自定义的旧名字（与实际端点不符）。
+            apiEntries[activeApiIndex] = entry.copy(label = label, url = url, key = key, model = model)
         }
     }
 

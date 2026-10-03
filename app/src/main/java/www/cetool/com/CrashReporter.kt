@@ -63,6 +63,13 @@ class CrashReporter : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // E12：ConversationManager 原本只由部分 Activity 调用 init，BondActivity /
+        // AdventureActivity 等入口没初始化 —— 进程被回收后从这些页面恢复会显示「空列表」
+        // （无崩溃，但数据像是丢了）。改由 Application 统一初始化一次；
+        // init() 已做成幂等（见 A4），各 Activity 里的重复调用无害。
+        ConversationManager.init(this)
+
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
 
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

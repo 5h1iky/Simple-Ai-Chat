@@ -42,6 +42,7 @@
     <string name="crash_no_browser">崩溃信息已复制到剪贴板，但未找到可打开链接的应用</string>
     <string name="settings_show_key">显示密钥</string>
     <string name="settings_hide_key">隐藏密钥</string>
+    <string name="char_list_name_missing">角色卡缺少名称，无法导入</string>
     <string name="retry">重试最后发送</string>
     <string name="edit_system_prompt">编辑系统提示词</string>
     <string name="system_prompt_for_conv">系统提示词（当前对话）</string>
