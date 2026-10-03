@@ -514,7 +514,15 @@ private fun EntryEditDialog(
                         OutlinedTextField(value = groupName, onValueChange = { groupName = it }, label = { Text(context.getString(R.string.world_edit_group)) }, modifier = Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ToggleLabel(context.getString(R.string.world_edit_regex), useRegex, { useRegex = it }, Modifier.weight(1f))
+                        // B22：切换正则开关时同步重排关键词文本，避免旧分隔符残留导致往返损坏
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Switch(checked = useRegex, onCheckedChange = { next ->
+                                keywords = reformatKeywords(keywords, useRegex, next)
+                                secondaryKeys = reformatKeywords(secondaryKeys, useRegex, next)
+                                useRegex = next
+                            })
+                            Text(context.getString(R.string.world_edit_regex), style = MaterialTheme.typography.labelMedium)
+                        }
                         ToggleLabel(context.getString(R.string.world_edit_case), caseSensitive, { caseSensitive = it }, Modifier.weight(1f))
                         ToggleLabel(context.getString(R.string.world_edit_selective), selective, { selective = it }, Modifier.weight(1f))
                     }
@@ -586,6 +594,15 @@ private fun ToggleLabel(
  */
 private fun joinKeywords(list: List<String>, regexMode: Boolean): String =
     if (regexMode) list.joinToString("\n") else list.joinToString(", ")
+
+/**
+ * 切换正则开关时把编辑框里的关键词文本按新模式重排（先按旧模式切，再按新模式拼）。
+ * 关闭正则时如果用户用的是换行分隔，会合并回逗号形式；开启正则时逗号分隔的会被拆成多行。
+ */
+private fun reformatKeywords(text: String, fromRegex: Boolean, toRegex: Boolean): String {
+    if (fromRegex == toRegex) return text
+    return joinKeywords(splitKeywords(text, fromRegex), toRegex)
+}
 
 /**
  * 编辑框文本 → 关键词列表。

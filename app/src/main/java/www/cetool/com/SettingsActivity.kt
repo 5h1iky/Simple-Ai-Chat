@@ -86,11 +86,36 @@ import java.io.ByteArrayOutputStream
  */
 class SettingsActivity : ComponentActivity() {
 
+    // ─── 数值输入的上下限（C6：原实现静默钳制却不回填输入框） ───
+    private companion object {
+        const val MIN_FONT_SIZE = 10
+        const val MAX_FONT_SIZE = 30
+        const val MIN_WORLD_BUDGET = 200
+        const val MAX_WORLD_BUDGET = 20000
+    }
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.apply(newBase))
     }
 
     private val gson = Gson()
+
+    /**
+     * C6：把输入即时钳制到合法区间。
+     *
+     * 原实现 `take(n)` 只限制位数（历史轮数允许 999、预算允许 99999、字号可以是 0），
+     * 实际钳制发生在 saveSettings 的 coerceIn 里 —— 用户输入的越界值仍显示在界面上，
+     * 保存后静默变成另一个值；字号存 0 更会让聊天文字全部不可见。
+     *
+     * 注意：**允许输入过程中短暂为空**（否则用户退格删完后没法继续输），
+     * 只在非空时才钳制。
+     */
+    private fun clampNumeric(input: String, min: Int, max: Int): String {
+        val digits = input.filter { it.isDigit() }
+        if (digits.isEmpty()) return ""
+        val value = digits.toLongOrNull() ?: return ""
+        return value.coerceIn(min.toLong(), max.toLong()).toString()
+    }
 
     // ─── UI 状态（Compose 可观察） ───
     private val apiEntries = mutableStateListOf<SettingsKeys.ApiEntry>()
@@ -516,7 +541,7 @@ class SettingsActivity : ComponentActivity() {
             .putString(SettingsKeys.KEY_PROVIDER_MODE, providerMode)
             .putString(SettingsKeys.KEY_KILO_MODEL, kiloModelOption)
             .putString(SettingsKeys.KEY_ZEN_MODEL, zenModelOption)
-            .putInt(SettingsKeys.KEY_FONT_SIZE, fontSizeText.toIntOrNull() ?: 15)
+            .putInt(SettingsKeys.KEY_FONT_SIZE, fontSizeText.toIntOrNull()?.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE) ?: 15)
             // 记忆历史消息轮数（全局生效），钳制在 5~100 范围内
             .putInt(
                 SettingsKeys.KEY_MAX_HISTORY,
@@ -526,7 +551,7 @@ class SettingsActivity : ComponentActivity() {
             .putInt(
                 SettingsKeys.KEY_WORLDINFO_BUDGET,
                 (worldBudgetText.toIntOrNull() ?: WorldInfoEngine.DEFAULT_BUDGET)
-                    .coerceIn(200, 20000)
+                    .coerceIn(MIN_WORLD_BUDGET, MAX_WORLD_BUDGET)
             )
             .putString(SettingsKeys.KEY_BG_MODE, bgMode)
             .putString(SettingsKeys.KEY_BG_IMAGE, bgImageBase64)
@@ -674,7 +699,9 @@ class SettingsActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = fontSizeText,
-                        onValueChange = { fontSizeText = it.filter { c -> c.isDigit() }.take(2) },
+                        // C6：原本 take(2) 无任何下限，可以存 0 → 聊天文字全部不可见。
+                        // 这里限制在 10~30 并即时回填。
+                        onValueChange = { fontSizeText = clampNumeric(it, MIN_FONT_SIZE, MAX_FONT_SIZE) },
                         label = { Text(getString(R.string.settings_font_size_hint)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
@@ -705,7 +732,9 @@ class SettingsActivity : ComponentActivity() {
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = maxHistoryText,
-                    onValueChange = { maxHistoryText = it.filter { c -> c.isDigit() }.take(3) },
+                    // C6：原本只 take(3) 允许输入 999，保存时 coerceIn(5,100) 静默钳制，
+                    // 输入框却仍显示用户输入的越界值。这里输入时就钳到合法区间并回填。
+                    onValueChange = { maxHistoryText = clampNumeric(it, SettingsKeys.MAX_HISTORY_MIN, SettingsKeys.MAX_HISTORY_MAX) },
                     label = { Text(getString(R.string.label_max_history)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -715,7 +744,7 @@ class SettingsActivity : ComponentActivity() {
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = worldBudgetText,
-                    onValueChange = { worldBudgetText = it.filter { c -> c.isDigit() }.take(5) },
+                    onValueChange = { worldBudgetText = clampNumeric(it, MIN_WORLD_BUDGET, MAX_WORLD_BUDGET) },
                     label = { Text(getString(R.string.settings_world_budget_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),

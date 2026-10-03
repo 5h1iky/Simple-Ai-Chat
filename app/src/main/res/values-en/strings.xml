@@ -285,7 +285,7 @@
     <string name="settings_font_preview">Preview</string>
     <string name="settings_system_prompt_label">Default system prompt</string>
     <string name="settings_system_prompt_note">Only applies to default chat mode; character mode follows the character card prompt</string>
-    <string name="settings_world_budget_label">World Info token budget (aligned with tavern Context %%/Budget)</string>
+    <string name="settings_world_budget_label">World Info token budget (aligned with tavern Context percentage/Budget)</string>
     <string name="settings_world_budget_note">Matched entries are injected within this budget; the rest are skipped (constant entries first)</string>
     <string name="settings_search_url_label">Search API URL</string>
     <string name="settings_search_note">After configuring, you can enable web search from the top-right menu</string>
@@ -311,7 +311,7 @@
     <!-- About -->
     <string name="about_version_slogan">%s · Lightweight AI chat</string>
     <string name="about_author_name">Author · 明日awo</string>
-    <string name="about_author_desc">99%% naturally AI-made</string>
+    <string name="about_author_desc">99% naturally AI-made</string>
     <string name="about_license">License · MIT</string>
     <string name="about_license_desc">Free to use, modify and distribute</string>
     <string name="about_copyright">Copyright © 2026 5h1iky</string>

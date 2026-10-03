@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  E2：禁止把 ai_config 里的明文 API Key 与全部会话数据放进云备份/设备迁移。
+
+  本应用此前 allowBackup="true" 且没有任何 backup 规则，
+  意味着 api_url / api_key / model 以及整個 SharedPreferences 会话库
+  都会随云备份或换机迁移离开设备。
+
+  Android 12+（targetSdk >= 31）读 dataExtractionRules，
+  低版本回落到 application 的 android:fullBackupContent="false"。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="ai_config.xml" />
+        <exclude domain="sharedpref" path="conversations.xml" />
+        <exclude domain="sharedpref" path="app_settings.xml" />
+        <exclude domain="file" path="characters/" />
+        <exclude domain="file" path="worldinfo/" />
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="ai_config.xml" />
+        <exclude domain="sharedpref" path="conversations.xml" />
+        <exclude domain="sharedpref" path="app_settings.xml" />
+        <exclude domain="file" path="characters/" />
+        <exclude domain="file" path="worldinfo/" />
+        <exclude domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

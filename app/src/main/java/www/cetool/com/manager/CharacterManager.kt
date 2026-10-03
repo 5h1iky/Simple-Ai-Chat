@@ -58,8 +58,12 @@ object CharacterManager {
         // 角色卡内嵌世界书（酒馆 extensions.world_book）：自动建书并绑定
         val finalCard = processEmbeddedWorldBook(context, card)
         val file = File(getDir(context), "$id.json")
-        file.writeText(TavernCardImporter.export(finalCard))
-        return id
+        // C4：原实现裸 writeText —— 磁盘满/权限异常会抛 IOException 且调用方无保护，
+        // 用户内容全丢；写入也不是原子的。这里统一用 try/catch + 临时文件 rename。
+        val ok = www.cetool.com.util.SafeFiles.writeAtomic(file, TavernCardImporter.export(finalCard)) { e ->
+            e.printStackTrace()
+        }
+        return if (ok) id else null
     }
 
     /**
@@ -92,8 +96,7 @@ object CharacterManager {
     fun overwrite(context: Context, characterId: String, json: String): Boolean {
         val file = File(getDir(context), "$characterId.json")
         if (!file.exists()) return false
-        file.writeText(json)
-        return true
+        return www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
     }
 
     fun delete(context: Context, characterId: String) {

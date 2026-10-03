@@ -393,6 +393,10 @@ class ChatActivity : ComponentActivity() {
         ConversationManager.save()
     }
 
+    /** E1：判断是否为可调试构建（发布版要把「测试崩溃上报」入口藏起来） */
+    private fun isDebugBuild(): Boolean =
+        (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
     // ───────────────────────── Compose 页面 ─────────────────────────
 
     @Composable
@@ -961,9 +965,13 @@ class ChatActivity : ComponentActivity() {
             if (groupExpanded["other"] == true) {
                 DrawerNavItem(Icons.Filled.Settings, getString(R.string.nav_settings), false, true) { onClose(); startActivity(Intent(ctx, SettingsActivity::class.java)) }
                 DrawerNavItem(Icons.Filled.Info, getString(R.string.nav_about), false, true) { onClose(); startActivity(Intent(ctx, AboutActivity::class.java)) }
-                DrawerNavItem(Icons.Filled.MoreVert, getString(R.string.nav_crash_test), false, true) {
-                    onClose()
-                    throw NullPointerException("这是测试崩溃，验证上报流程")
+                // E1：发布版仍保留「测试崩溃上报」入口，点击直接 throw NullPointerException。
+                // 改为只在 debuggable 构建里显示。
+                if (isDebugBuild()) {
+                    DrawerNavItem(Icons.Filled.MoreVert, getString(R.string.nav_crash_test), false, true) {
+                        onClose()
+                        throw NullPointerException("这是测试崩溃，验证上报流程")
+                    }
                 }
             }
 

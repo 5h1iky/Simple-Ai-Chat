@@ -5,12 +5,14 @@
 
     <application
         android:name=".CrashReporter"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.CRtools"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".SplashActivity"
@@ -22,9 +24,11 @@
             </intent-filter>
         </activity>
 
+        <!-- E4：原本 exported="true" 且无 intent-filter，任何应用都能拉起密钥填写页。
+             它不读任何 extra，改为 false 无副作用。 -->
         <activity
             android:name=".SettingsActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.CRtools" />
 
         <activity

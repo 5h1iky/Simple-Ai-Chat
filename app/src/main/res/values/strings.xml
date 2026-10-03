@@ -285,7 +285,7 @@
     <string name="settings_font_preview">预览</string>
     <string name="settings_system_prompt_label">默认系统提示词</string>
     <string name="settings_system_prompt_note">仅在默认聊天模式起效，角色模式只按角色卡提示词来</string>
-    <string name="settings_world_budget_label">世界书 token 预算（酒馆 Context %%/Budget 对齐）</string>
+    <string name="settings_world_budget_label">世界书 token 预算（酒馆 Context 百分比/Budget 对齐）</string>
     <string name="settings_world_budget_note">世界书命中条目按此预算注入上下文，超出部分不注入（常驻条目优先）</string>
     <string name="settings_search_url_label">搜索 API 地址</string>
     <string name="settings_search_note">配置后可在右侧三点菜单中开启联网搜索</string>
@@ -311,7 +311,7 @@
     <!-- 关于页 -->
     <string name="about_version_slogan">%s · 轻量 AI 聊天</string>
     <string name="about_author_name">作者 · 明日awo</string>
-    <string name="about_author_desc">99%% 纯天然 AI 制作</string>
+    <string name="about_author_desc">99% 纯天然 AI 制作</string>
     <string name="about_license">开源许可 · MIT</string>
     <string name="about_license_desc">可自由使用、修改与分发</string>
     <string name="about_copyright">Copyright © 2026 5h1iky</string>

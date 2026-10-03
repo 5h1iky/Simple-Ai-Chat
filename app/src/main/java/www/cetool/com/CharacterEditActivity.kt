@@ -202,9 +202,16 @@ class CharacterEditActivity : ComponentActivity() {
         val card = TavernCard(data = data, avatarBase64 = avatar)
         val json = Gson().toJson(card)
 
-        val id = editCharacterId?.let {
-            if (CharacterManager.overwrite(this, it, json)) it else null
-        } ?: CharacterManager.save(this, json)
+        // C4：保存路径原本没有 IO 保护 —— writeText 在磁盘满/权限异常时抛 IOException，
+        // 编辑器没有 try/catch → 崩溃且用户编辑内容全丢。这里整体兜住并明确提示。
+        val id = try {
+            editCharacterId?.let {
+                if (CharacterManager.overwrite(this, it, json)) it else null
+            } ?: CharacterManager.save(this, json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
 
         if (id != null) {
             Toast.makeText(this, getString(R.string.char_edit_saved, name), Toast.LENGTH_SHORT).show()
