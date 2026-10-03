@@ -76,9 +76,14 @@ object ConversationManager {
     val current: Conversation
         get() = if (conversations.isEmpty()) {
             createNew()
-            conversations[currentIndex]
+            currentIndex = 0
+            conversations[0]
         } else {
-            conversations[currentIndex]
+            // 防御性钳制：currentIndex 若因任何路径越界，
+            // 直接下标访问会抛 IndexOutOfBoundsException 并崩在 UI 线程上
+            val safeIndex = currentIndex.coerceIn(0, conversations.size - 1)
+            if (safeIndex != currentIndex) currentIndex = safeIndex
+            conversations[safeIndex]
         }
 
     val all: List<Conversation>
@@ -506,14 +511,19 @@ object ConversationManager {
                     worldInfoIds = entry.worldInfoIds ?: emptyList(),
                     isArchived = entry.isArchived ?: false,
                     adventureRoleIds = entry.adventureRoleIds ?: emptyList(),
-                    messages = entry.messages.map { msg ->
-                        Message(
+                    // D8：必须显式用 CopyOnWriteArrayList —— 原来这里是 .toMutableList()，
+                    // 会绕开 Conversation 的默认值，导致**从磁盘加载回来的会话**
+                    // 又变回普通 ArrayList，线程安全修复只在新建会话上生效。
+                    messages = java.util.concurrent.CopyOnWriteArrayList(
+                        entry.messages.map { msg ->
+                            Message(
                                 role = msg.role, content = msg.content, timestamp = msg.timestamp,
                                 reasoningContent = msg.reasoningContent ?: "",
                                 attachmentType = msg.attachmentType, attachmentData = msg.attachmentData,
                                 attachmentName = msg.attachmentName
                             )
-                    }.toMutableList()
+                        }
+                    )
                 )
                 conversations.add(conv)
             }
