@@ -43,6 +43,8 @@
     <string name="settings_show_key">显示密钥</string>
     <string name="settings_hide_key">隐藏密钥</string>
     <string name="char_list_name_missing">角色卡缺少名称，无法导入</string>
+    <string name="export_state_lost">导出已取消：应用在导出过程中被系统回收，请重新发起导出</string>
+    <string name="export_write_failed">无法写入所选位置，请换一个目录或检查存储权限</string>
     <string name="settings_cleartext_warning">⚠ 这是 http:// 明文地址：API Key 与对话内容会以明文经过网络，请仅在可信局域网内使用</string>
     <string name="retry">重试最后发送</string>
     <string name="edit_system_prompt">编辑系统提示词</string>

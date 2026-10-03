@@ -424,8 +424,11 @@ private fun ChatBubble(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                     )
                 } else {
+                    // D5：parseContentBlocks 内部跑正则，原来每次重组都会整段重跑；
+                    // 流式期间每个 token 都会重组，正文越长越贵。按正文内容记忆结果。
+                    val blocks = remember(bodyText) { parseContentBlocks(bodyText) }
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        parseContentBlocks(bodyText).forEach { block ->
+                        blocks.forEach { block ->
                             when (block) {
                                 is ContentBlock.Text -> {
                                     if (block.text.isNotBlank()) {
@@ -471,16 +474,28 @@ private fun ChatBubble(
             }
         }
 
+        // D5：原实现每次重组都 new 一个 SimpleDateFormat（构造有解析/初始化成本），
+        // 且流式期间每个 token 都会重组全部气泡。改为用线程局部实例 + 按时间戳记忆结果。
+        val timeText = remember(message.timestamp) { formatClock(message.timestamp) }
         Text(
-            text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(
-                java.util.Date(message.timestamp)
-            ),
+            text = timeText,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier.padding(top = 2.dp)
         )
     }
 }
+
+/**
+ * D5：SimpleDateFormat 不是线程安全的，不能做成全局单例；
+ * 但也没必要每次重建 —— 用 ThreadLocal 复用，并配合 remember 避免重复格式化。
+ */
+private val clockFormat = object : ThreadLocal<java.text.SimpleDateFormat>() {
+    override fun initialValue() = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+}
+
+private fun formatClock(timestamp: Long): String =
+    clockFormat.get()!!.format(java.util.Date(timestamp))
 
 /**
  * 附件卡片：气泡内的附件展示。

@@ -89,13 +89,23 @@ class WorldInfoListActivity : ComponentActivity() {
     ) { uri: Uri? ->
         val json = exportPendingJson
         exportPendingJson = null
-        if (uri != null && json != null) {
-            try {
-                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                Toast.makeText(this, getString(R.string.world_list_exported), Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, getString(R.string.world_list_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
-            }
+        if (uri == null) return@registerForActivityResult   // 用户取消，无需提示
+        if (json == null) {
+            // D9：跨配置变更/进程回收后 exportPendingJson 会丢失。
+            // 原实现的成功与失败 toast 都在 `if (uri != null && json != null)` 分支内，
+            // 于是这种情况下**既不写文件也不提示**，用户以为导出成功了。
+            Toast.makeText(this, getString(R.string.export_state_lost), Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                ?: run {
+                    Toast.makeText(this, getString(R.string.export_write_failed), Toast.LENGTH_SHORT).show()
+                    return@registerForActivityResult
+                }
+            Toast.makeText(this, getString(R.string.world_list_exported), Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.world_list_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
