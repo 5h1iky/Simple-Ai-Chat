@@ -32,7 +32,9 @@ object ConversationManager {
     private const val KEY_CURRENT_ID = "current_conversation_id"
     private const val KEY_SYSTEM_PROMPT = "system_prompt_default"
 
-    private val gson = Gson()
+    // C2：会话库文件同样可能被手工编辑或截断，`"content": null` 会让非空 Kotlin 属性
+    // 变成真正的 null，之后在 UI 或发送路径上 NPE。与其他持久化模型统一用空值兜底。
+    private val gson = www.cetool.com.util.NullSafeTypeAdapterFactory.buildGson()
     private lateinit var prefs: SharedPreferences
     private lateinit var appContext: Context
 
@@ -318,7 +320,8 @@ object ConversationManager {
         // {{char}} 此前全项目无实现，导致角色卡里大量使用的 {{char}} 以字面量进入上下文。
         val settingsPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
         val macroUserName = settingsPrefs.getString(SettingsKeys.KEY_USER_NAME, "用户")?.ifBlank { "用户" } ?: "用户"
-        val macroCharName = charDisplayName(conv, activeCard)
+        // {{char}}：角色卡名字优先，退回 AI 显示名
+        val macroCharName = charDisplayName(activeCard)
         historyItems.replaceAll { item ->
             val text = item.content.asJsonPrimitive?.asString ?: return@replaceAll item
             if (!text.contains("{{")) return@replaceAll item
@@ -609,10 +612,8 @@ object ConversationManager {
         }
     }
 
-    private fun charDisplayName(
-        conv: Conversation,
-        card: www.cetool.com.model.TavernCard? = null
-    ): String {
+    /** {{char}} 的取值：角色卡名字优先，退回设置里的 AI 显示名 */
+    private fun charDisplayName(card: www.cetool.com.model.TavernCard? = null): String {
         val aiName = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
             .getString(SettingsKeys.KEY_AI_NAME, "AI")?.ifBlank { "AI" } ?: "AI"
         val cardName = card?.data?.name?.trim().orEmpty()
