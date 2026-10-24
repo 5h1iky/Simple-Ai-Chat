@@ -65,15 +65,33 @@ class AdventureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val worldInfos = WorldInfoManager.list(this)
-        val characters = CharacterManager.list(this)
-
         var selectedWorldId by mutableStateOf<String?>(null)
         val selectedRoleIds = mutableStateListOf<String>()
         var opening by mutableStateOf("")
 
         setContent {
             SAChatTheme {
+                // D4：原实现在 onCreate 主线程同步调用 WorldInfoManager.list() /
+                // CharacterManager.list()（逐卡读盘 + 解析 base64 头像），卡多时 ANR。
+                // 与 WorldInfoList / CharacterList / Bond 一样移到 IO 线程加载，
+                // 加载完成前列表为空 → 显示现有空态文案（UI 结构不变，只改加载时机）。
+                val worldInfos by androidx.compose.runtime.produceState(
+                    initialValue = emptyList<WorldInfoSummary>()
+                ) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { WorldInfoManager.list(this@AdventureActivity) }
+                            .getOrDefault(emptyList())
+                    }
+                }
+                val characters by androidx.compose.runtime.produceState(
+                    initialValue = emptyList<CharacterInfo>()
+                ) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { CharacterManager.list(this@AdventureActivity) }
+                            .getOrDefault(emptyList())
+                    }
+                }
+
                 AdventureConfigScreen(
                     worldInfos = worldInfos,
                     characters = characters,

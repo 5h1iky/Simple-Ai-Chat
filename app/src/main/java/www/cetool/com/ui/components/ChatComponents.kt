@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -112,7 +111,9 @@ data class AttachmentInfo(
 @Composable
 private fun rememberAttachmentInfo(message: Message): AttachmentInfo? {
     val data = message.attachmentData ?: return null
-    val type = message.attachmentType ?: return null
+    // NullSafeTypeAdapterFactory 会把 JSON 显式 null 的 attachmentType 翻成 ""，
+    // 直接判空会失效 → 可能渲染"幻影附件卡"，先过滤空白串再走原逻辑
+    val type = message.attachmentType?.takeIf { it.isNotBlank() } ?: return null
     val text = if (type == Message.ATTACH_TYPE_TEXT) message.displayText() else message.content
     val name = message.attachmentName?.takeIf { it.isNotBlank() }
         ?: stringResource(if (type == Message.ATTACH_TYPE_IMAGE) R.string.file_image else R.string.file_text)
@@ -135,9 +136,11 @@ fun MessageList(
     onCharacterBindingClick: () -> Unit,
     onWorldBindingClick: () -> Unit,
     onCardClick: (String) -> Unit,
+    conversationId: String = "",
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
+    // M16：LazyListState 跨会话残留 —— 按会话 id 隔离，切换会话时重建滚动状态
+    val listState = remember(conversationId) { LazyListState() }
     // 附件全文查看器：只有用户主动打开时才渲染全文（大文件不拖慢聊天列表）
     var viewingAttachment by remember { mutableStateOf<AttachmentInfo?>(null) }
 
@@ -147,7 +150,11 @@ fun MessageList(
     val messageToIndex: (Int) -> Int = { it + headerCount }
 
     // 新消息自动滚动到底部
-    LaunchedEffect(messages.size, headerCount) {
+    // M16：key 加入会话 id 与末条 content 长度 —— 流式回复时 size 不变但内容增长也要跟随滚动，
+    // 切到消息数相同的另一会话时也要重启 effect（否则滚动位置沿用旧会话）
+    LaunchedEffect(
+        conversationId, messages.size, headerCount, messages.lastOrNull()?.content?.length
+    ) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messageToIndex(messages.size - 1))
         }
@@ -184,7 +191,9 @@ fun MessageList(
                     Spacer(Modifier.height(8.dp))
                 }
             }
-            itemsIndexed(messages) { _, message ->
+            // M15：Message 无稳定 id，用「时间戳+下标」复合 key 防止删除/重生成时
+            // LazyColumn 按位置复用组合状态（FoldableSection 展开态等迁移到相邻消息）
+            itemsIndexed(messages, key = { index, m -> "${m.timestamp}-$index" }) { _, message ->
                 ChatMessageRow(
                     message = message,
                     isUser = message.role == Message.ROLE_USER,
@@ -333,8 +342,9 @@ private fun ChatAvatar(avatarBase64: String?, modifier: Modifier = Modifier) {
         if (avatarBase64 == null) null
         else try {
             val bytes = Base64.decode(avatarBase64, Base64.DEFAULT)
-            // 第三个参数是要解析的字节数，必须传实际长度（传 0 会返回 null 且不抛异常）
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            // M13：头像只进 32dp 圆圈，按 256px 采样解码（含精确缩放），
+            // 避免每条消息各持一份全尺寸副本
+            www.cetool.com.util.ImageDecoder.decodeByteArray(bytes, maxEdge = 256)
         } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
     }
     Box(

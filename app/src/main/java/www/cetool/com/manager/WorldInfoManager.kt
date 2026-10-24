@@ -9,6 +9,25 @@ import java.io.File
 /** B26：解析失败的条目用这个名字标记（判定艺术品：界面识别并展示，引擎跳过不注入） */
 const val BROKEN_ENTRY_NAME = "__broken__"
 
+/**
+ * M11：显式 JSON null（如 `"name": null`）时 Gson 的 asString/asBoolean/asInt 会抛
+ * UnsupportedOperationException，被上层 `catch (_: Exception) { null }` 吞掉后，
+ * 整本世界书从列表「静默消失」、绑定失效（文件其实还在）。
+ * 取值前统一排除 JsonNull；非 null 的类型错误（如把对象当字符串）仍照旧抛出，
+ * 由 B26 的损坏哨兵条目机制呈现，不在这里兜底成默认值。
+ */
+private fun com.google.gson.JsonElement?.asStringOrNull(): String? =
+    this?.takeIf { !it.isJsonNull }?.asString
+
+private fun com.google.gson.JsonElement?.asBooleanOrNull(): Boolean? =
+    this?.takeIf { !it.isJsonNull }?.asBoolean
+
+private fun com.google.gson.JsonElement?.asIntOrNull(): Int? =
+    this?.takeIf { !it.isJsonNull }?.asInt
+
+private fun com.google.gson.JsonElement?.asJsonArrayOrNull(): com.google.gson.JsonArray? =
+    this?.takeIf { !it.isJsonNull }?.asJsonArray
+
 object WorldInfoManager {
 
     private const val DIR_NAME = "worldinfo"
@@ -67,12 +86,16 @@ object WorldInfoManager {
         return try {
             val json = file.readText()
             val root = com.google.gson.JsonParser.parseString(json).asJsonObject
-            val data = root.getAsJsonObject("data") ?: root
+            // M11：`"data": null` 时 getAsJsonObject 抛异常 → 外层 catch 吞掉 → 书从
+            // 列表消失。把 JsonNull 的 data 当作「没有 data」回退到根节点；
+            // 真正的类型错误（如 data 是字符串）仍抛出，交由 P2 的加载失败保护兜底。
+            val dataEl = root.get("data")
+            val data = if (dataEl == null || dataEl.isJsonNull) root else dataEl.asJsonObject
             WorldInfo(
                 id = id,
-                name = data.get("name")?.asString ?: "",
-                description = data.get("description")?.asString ?: "",
-                enabled = data.get("enabled")?.asBoolean ?: true,
+                name = data.get("name").asStringOrNull() ?: "",
+                description = data.get("description").asStringOrNull() ?: "",
+                enabled = data.get("enabled").asBooleanOrNull() ?: true,
                 entries = parseEntries(data)
             )
         } catch (_: Exception) { null }
@@ -95,46 +118,53 @@ object WorldInfoManager {
 
     private fun parseEntries(data: com.google.gson.JsonObject): MutableList<WorldEntry> {
         val entries = mutableListOf<WorldEntry>()
-        val entriesArray = data.getAsJsonArray("entries") ?: return entries
+        // M11：`"entries": null` 时 getAsJsonArray 的强转会抛 ClassCastException，
+        // 同样被外层 catch 吞掉 → 书从列表消失。null 视为「没有条目」。
+        val entriesArray = data.get("entries").asJsonArrayOrNull() ?: return entries
         for (element in entriesArray) {
             try {
                 val obj = element.asJsonObject
+                // M11：以下取值全部排除 JsonNull（见文件头 asStringOrNull 等小工具），
+                // 否则 `"name": null` 这类条目会被整条丢进 B26 损坏哨兵。
                 val entry = WorldEntry(
-                    id = obj.get("id")?.asString ?: java.util.UUID.randomUUID().toString().take(8),
-                    name = obj.get("name")?.asString ?: "",
-                    enabled = obj.get("enabled")?.asBoolean ?: true,
-                    priority = obj.get("priority")?.asInt ?: 1000,
-                    position = obj.get("position")?.asString ?: "after_system_prompt",
-                    content = obj.get("content")?.asString ?: "",
-                    injectDepth = obj.get("injectDepth")?.asInt ?: 4,
-                    role = obj.get("role")?.asString,
-                    keywords = obj.getAsJsonArray("keywords")?.map { it.asString }?.toMutableList() ?: mutableListOf(),
-                    useRegex = obj.get("useRegex")?.asBoolean ?: false,
-                    caseSensitive = obj.get("caseSensitive")?.asBoolean ?: false,
-                    scanDepth = obj.get("scanDepth")?.asInt ?: 4,
-                    constantActive = obj.get("constantActive")?.asBoolean ?: false,
-                    stPosition = obj.get("stPosition")?.asInt ?: -1,
-                    wholeWords = obj.get("wholeWords")?.asBoolean ?: true,
-                    secondaryKeys = obj.getAsJsonArray("secondaryKeys")?.map { it.asString }?.toMutableList() ?: mutableListOf(),
-                    selective = obj.get("selective")?.asBoolean ?: false,
-                    selectiveLogic = obj.get("selectiveLogic")?.asInt ?: 0,
-                    probability = obj.get("probability")?.asInt ?: 100,
-                    useProbability = obj.get("useProbability")?.asBoolean ?: false,
-                    groupName = obj.get("groupName")?.asString ?: "",
-                    groupWeight = obj.get("groupWeight")?.asInt ?: 100,
-                    excludeRecursion = obj.get("excludeRecursion")?.asBoolean ?: false,
-                    preventRecursion = obj.get("preventRecursion")?.asBoolean ?: false,
-                    delayUntilRecursion = obj.get("delayUntilRecursion")?.asBoolean ?: false,
-                    automationId = obj.get("automationId")?.asString ?: "",
-                    score = obj.get("score")?.asInt ?: 0,
-                    sticky = obj.get("sticky")?.asInt ?: 0,
-                    cooldown = obj.get("cooldown")?.asInt ?: 0,
-                    delay = obj.get("delay")?.asInt ?: 0,
-                    displayIndex = obj.get("displayIndex")?.asInt ?: 0,
-                    comment = obj.get("comment")?.asString ?: "",
-                    vectorized = obj.get("vectorized")?.asBoolean ?: false,
-                    triggers = obj.getAsJsonArray("triggers")?.map { it.asString }?.toMutableList() ?: mutableListOf(),
-                    injectRole = obj.get("injectRole")?.asString
+                    id = obj.get("id").asStringOrNull() ?: java.util.UUID.randomUUID().toString().take(8),
+                    name = obj.get("name").asStringOrNull() ?: "",
+                    enabled = obj.get("enabled").asBooleanOrNull() ?: true,
+                    priority = obj.get("priority").asIntOrNull() ?: 1000,
+                    position = obj.get("position").asStringOrNull() ?: "after_system_prompt",
+                    content = obj.get("content").asStringOrNull() ?: "",
+                    injectDepth = obj.get("injectDepth").asIntOrNull() ?: 4,
+                    role = obj.get("role").asStringOrNull(),
+                    keywords = obj.get("keywords").asJsonArrayOrNull()
+                        ?.mapNotNull { it.asStringOrNull() }?.toMutableList() ?: mutableListOf(),
+                    useRegex = obj.get("useRegex").asBooleanOrNull() ?: false,
+                    caseSensitive = obj.get("caseSensitive").asBooleanOrNull() ?: false,
+                    scanDepth = obj.get("scanDepth").asIntOrNull() ?: 4,
+                    constantActive = obj.get("constantActive").asBooleanOrNull() ?: false,
+                    stPosition = obj.get("stPosition").asIntOrNull() ?: -1,
+                    wholeWords = obj.get("wholeWords").asBooleanOrNull() ?: true,
+                    secondaryKeys = obj.get("secondaryKeys").asJsonArrayOrNull()
+                        ?.mapNotNull { it.asStringOrNull() }?.toMutableList() ?: mutableListOf(),
+                    selective = obj.get("selective").asBooleanOrNull() ?: false,
+                    selectiveLogic = obj.get("selectiveLogic").asIntOrNull() ?: 0,
+                    probability = obj.get("probability").asIntOrNull() ?: 100,
+                    useProbability = obj.get("useProbability").asBooleanOrNull() ?: false,
+                    groupName = obj.get("groupName").asStringOrNull() ?: "",
+                    groupWeight = obj.get("groupWeight").asIntOrNull() ?: 100,
+                    excludeRecursion = obj.get("excludeRecursion").asBooleanOrNull() ?: false,
+                    preventRecursion = obj.get("preventRecursion").asBooleanOrNull() ?: false,
+                    delayUntilRecursion = obj.get("delayUntilRecursion").asBooleanOrNull() ?: false,
+                    automationId = obj.get("automationId").asStringOrNull() ?: "",
+                    score = obj.get("score").asIntOrNull() ?: 0,
+                    sticky = obj.get("sticky").asIntOrNull() ?: 0,
+                    cooldown = obj.get("cooldown").asIntOrNull() ?: 0,
+                    delay = obj.get("delay").asIntOrNull() ?: 0,
+                    displayIndex = obj.get("displayIndex").asIntOrNull() ?: 0,
+                    comment = obj.get("comment").asStringOrNull() ?: "",
+                    vectorized = obj.get("vectorized").asBooleanOrNull() ?: false,
+                    triggers = obj.get("triggers").asJsonArrayOrNull()
+                        ?.mapNotNull { it.asStringOrNull() }?.toMutableList() ?: mutableListOf(),
+                    injectRole = obj.get("injectRole").asStringOrNull()
                 )
                 entries.add(entry)
             } catch (e: Exception) {
@@ -155,23 +185,48 @@ object WorldInfoManager {
         return entries
     }
 
-    fun saveNew(context: Context, info: WorldInfo): String {
+    /** 计算安全的落盘 id：空 id 重新生成；非法形态（路径穿越）一律重新生成 */
+    private fun safeId(context: Context, info: WorldInfo): String =
         // 防呆：id 为空时重新生成（旧实现曾把缺失 id 写成 "null.json" 互相覆盖）
         // P1：id 可能来自导入文件（不可信），非法形态一律重新生成，防止路径穿越
-        val id = info.id?.takeIf { fileOf(context, it) != null }
+        info.id?.takeIf { fileOf(context, it) != null }
             ?: java.util.UUID.randomUUID().toString().take(8)
+
+    /**
+     * M7：保存新世界书，**写盘失败返回 null**（不再吞掉 SafeFiles.writeAtomic 的失败
+     * 仍返回 id —— 那样调用方拿到「成功」但文件根本没写进去，磁盘满/IO 异常时数据全丢）。
+     * 成功返回真正落盘的 id（可能是重新生成的）。
+     */
+    fun saveNewOrNull(context: Context, info: WorldInfo): String? {
+        val id = safeId(context, info)
         val safe = info.copy(id = id)
         val json = buildJson(safe)
         val file = File(getDir(context), "$id.json")
         // C4：原子写入 + IOException 保护（裸 writeText 会让磁盘满/权限异常直接崩溃）
-        www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
+        val ok = www.cetool.com.util.SafeFiles.writeAtomic(file, json) { it.printStackTrace() }
+        return if (ok) id else null
+    }
+
+    /**
+     * 兼容入口：**不检查写盘结果**（失败仍返回 id，与旧版 saveNew 语义一致）。
+     * ChatActivity / WorldInfoListActivity / CharacterManager 的旧调用方暂用它承接
+     * （它们各自不在本次修改范围内）；新代码请用 [saveNewOrNull] 并处理 null。
+     */
+    fun saveNew(context: Context, info: WorldInfo): String {
+        val id = safeId(context, info)
+        saveNewOrNull(context, info.copy(id = id))
         return id
     }
 
     fun overwrite(context: Context, id: String, info: WorldInfo): Boolean {
         val file = fileOf(context, id) ?: return false
-        if (!file.exists()) return saveNew(context, info).let { true }
-        return www.cetool.com.util.SafeFiles.writeAtomic(file, buildJson(info)) { it.printStackTrace() }
+        // M7：目标文件必须始终对应参数 id —— 旧实现在「文件不存在」的回退路径上调
+        // saveNew(context, info)，实际写到的是 info.id（或重新生成的 id）的文件上，
+        // 参数 id 对应的文件根本没被写入却返回 true（目标文件错位 + 假成功）。
+        // writeAtomic 本身能创建新文件，无需回退；info.id 与 id 不一致时统一改写成 id，
+        // 保证文件名与内嵌 id 一致。
+        val safe = if (info.id == id) info else info.copy(id = id)
+        return www.cetool.com.util.SafeFiles.writeAtomic(file, buildJson(safe)) { it.printStackTrace() }
     }
 
     fun delete(context: Context, id: String) {

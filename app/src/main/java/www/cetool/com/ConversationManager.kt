@@ -249,6 +249,9 @@ object ConversationManager {
                     onUiUpdate?.invoke()
                     onCurrentMessageUpdated?.invoke(conversationId)
                 }
+                // M8：失败路径也要收尾模型信息回调，否则 ChatActivity 顶栏会
+                // 永久停在「正在获取模型…」（与 B12 同源问题）。
+                onModelInfo?.invoke(null, null)
             }
         }
     }
@@ -434,18 +437,35 @@ object ConversationManager {
             // Gson 的 getAsJsonPrimitive() 对非原始元素**抛 IllegalStateException**
             //（`?.` 只防空引用不拦异常）→ 只要历史里有一条带附件的消息就整轮发送失败。
             // 必须先用 isJsonPrimitive 判型（与全项目其它 20 处写法一致）。
-            val text = item.content.takeIf { it.isJsonPrimitive }?.asString ?: return@replaceAll item
-            if (!text.contains("{{")) return@replaceAll item
-            // P1-11：{{outlet::名称}} 手动拉取（酒馆 Outlet 条目唯一进入提示词的途径）
-            val afterOutlet = if (outletEntries.isNotEmpty() && text.contains("{{outlet::", ignoreCase = true)) {
-                OUTLET_MACRO.replace(text) { m -> outletEntries[m.groupValues[1].trim()] ?: m.value }
-            } else {
-                text
+            fun applyMacros(raw: String): String {
+                // P1-11：{{outlet::名称}} 手动拉取（酒馆 Outlet 条目唯一进入提示词的途径）
+                val afterOutlet = if (outletEntries.isNotEmpty() && raw.contains("{{outlet::", ignoreCase = true)) {
+                    OUTLET_MACRO.replace(raw) { m -> outletEntries[m.groupValues[1].trim()] ?: m.value }
+                } else {
+                    raw
+                }
+                return afterOutlet.replace("{{user}}", macroUserName).replace("{{char}}", macroCharName)
             }
-            MessageItem.text(
-                item.role,
-                afterOutlet.replace("{{user}}", macroUserName).replace("{{char}}", macroCharName)
-            )
+            val content = item.content
+            if (content.isJsonPrimitive) {
+                val text = content.asString
+                if (!text.contains("{{")) return@replaceAll item
+                MessageItem.text(item.role, applyMacros(text))
+            } else if (content.isJsonArray) {
+                // L1：带附件消息的 text 块同样要替换宏 —— 原实现在此直接跳过，
+                // 附件正文里的 {{user}}/{{char}} 以字面量发给模型。
+                for (el in content.asJsonArray) {
+                    if (!el.isJsonObject) continue
+                    val obj = el.asJsonObject
+                    val textEl = obj.get("text")?.takeIf { it.isJsonPrimitive } ?: continue
+                    val text = textEl.asString
+                    if (!text.contains("{{")) continue
+                    obj.addProperty("text", applyMacros(text))
+                }
+                item
+            } else {
+                item
+            }
         }
 
         // B20：Web 搜索此前是死功能（开关和 URL 只被读写，从不发请求）。
@@ -467,6 +487,8 @@ object ConversationManager {
         // 连请求都不发出去（避免白烧 token）。
         if (!conv.isStreaming) {
             save()
+            // M8：取消窗口提前退出同样要收尾模型信息回调（顶栏卡「正在获取模型…」）
+            onModelInfo?.invoke(null, null)
             return
         }
 
@@ -537,6 +559,8 @@ object ConversationManager {
         if (!conv.isStreaming) {
             eventSource.cancel()
             save()
+            // M8：同上，取消窗口退出要收尾模型信息回调
+            onModelInfo?.invoke(null, null)
             return
         }
         activeStreams[conversationId] = eventSource
@@ -562,29 +586,32 @@ object ConversationManager {
     fun save() {
         if (!::prefs.isInitialized) return
         try {
-            val data = ConversationData(
-                conversations = conversations.map { conv ->
-                    ConversationEntry(
-                        id = conv.id, title = conv.title, systemPrompt = conv.systemPrompt,
-                        createdAt = conv.createdAt, updatedAt = conv.updatedAt,
-                        isStreaming = conv.isStreaming, characterId = conv.characterId, worldInfoId = conv.worldInfoId,
-                        worldInfoIds = conv.worldInfoIds,
-                        isArchived = conv.isArchived,
-                        adventureRoleIds = conv.adventureRoleIds,
-                        messages = conv.messages.map { msg ->
-                            MessageEntry(
-                                role = msg.role, content = msg.content, timestamp = msg.timestamp,
-                                reasoningContent = msg.reasoningContent ?: "",
-                                attachmentType = msg.attachmentType, attachmentData = msg.attachmentData,
-                                attachmentName = msg.attachmentName
-                            )
-                        }
-                    )
-                },
-                currentId = conversations.getOrNull(currentIndex)?.id ?: ""
-            )
-            val json = gson.toJson(data)
             synchronized(lock) {
+                // M4：快照必须在锁内构建 —— 原来快照在锁外、写盘在锁内，
+                // SSE 线程（onFinish/buildAndSend 末尾）与主线程（onPause/清空）并发 save 时，
+                // 先建快照的线程后拿锁写盘，会用旧快照覆盖新快照（丢标题/丢末条消息）。
+                val data = ConversationData(
+                    conversations = conversations.map { conv ->
+                        ConversationEntry(
+                            id = conv.id, title = conv.title, systemPrompt = conv.systemPrompt,
+                            createdAt = conv.createdAt, updatedAt = conv.updatedAt,
+                            isStreaming = conv.isStreaming, characterId = conv.characterId, worldInfoId = conv.worldInfoId,
+                            worldInfoIds = conv.worldInfoIds,
+                            isArchived = conv.isArchived,
+                            adventureRoleIds = conv.adventureRoleIds,
+                            messages = conv.messages.map { msg ->
+                                MessageEntry(
+                                    role = msg.role, content = msg.content, timestamp = msg.timestamp,
+                                    reasoningContent = msg.reasoningContent ?: "",
+                                    attachmentType = msg.attachmentType, attachmentData = msg.attachmentData,
+                                    attachmentName = msg.attachmentName
+                                )
+                            }
+                        )
+                    },
+                    currentId = conversations.getOrNull(currentIndex)?.id ?: ""
+                )
+                val json = gson.toJson(data)
                 // D2：整个会话库（含 base64 附件，单会话可达 27MB）原本序列化成一个大 JSON
                 // 写进 SharedPreferences，每次 save 全量重写、加载时整份 XML 全量解析，
                 // 带图片附件时启动即卡。改为写独立文件（原子写入），prefs 只留轻量索引。
@@ -637,6 +664,12 @@ object ConversationManager {
             // readTextWithRecovery：目标为空时可用上次保留的 .tmp 顶替
             val raw = www.cetool.com.util.SafeFiles.readTextWithRecovery(file)
             if (raw != null && isParsableConversationData(raw)) return raw
+            // M5：主文件「非空但损坏」（rename 失败后退化非原子覆盖、中途被杀）
+            // 时，writeAtomic 特意保留的 .tmp 是唯一完整副本 —— 解析失败必须回头
+            // 尝试它，否则完整副本被弃、随后走进 load() 的重建流程。
+            val tmp = java.io.File(file.parentFile, "${file.name}.tmp")
+            val tmpRaw = www.cetool.com.util.SafeFiles.readText(tmp)
+            if (tmpRaw != null && isParsableConversationData(tmpRaw)) return tmpRaw
         }
         return prefs.getString(KEY_DATA, null)?.takeIf { isParsableConversationData(it) }
     }
@@ -652,6 +685,21 @@ object ConversationManager {
         }
     }
 
+    /**
+     * H1：解析异常 / 坏条目时把原始 JSON 留底到 `conversations.json.bak`。
+     * 没有它的话，跳过坏条目后的下一次 save() 会把缺损的库写盘，
+     * 被跳过的会话就永久找不回来了。
+     */
+    private fun backupCorruptData(json: String) {
+        try {
+            val file = dataFile() ?: return
+            val bak = java.io.File(file.parentFile, "${file.name}.bak")
+            www.cetool.com.util.SafeFiles.writeAtomic(bak, json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun load() {
         if (!::prefs.isInitialized) return
         try {
@@ -662,39 +710,58 @@ object ConversationManager {
                 currentIndex = 0
                 return
             }
-            val data = gson.fromJson(json, ConversationData::class.java)
+            val data = try {
+                gson.fromJson(json, ConversationData::class.java)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
             // D2：损坏/被清空的旧数据不应让整个会话库消失
             if (data?.conversations == null) {
+                // H1：反序列化失败也不能一清了之 —— 先备份原文再重建，
+                // 否则下一次 save() 会把空白库写盘、原始数据永久归零。
+                backupCorruptData(json)
                 conversations.clear()
                 conversations.add(Conversation())
                 currentIndex = 0
                 return
             }
-            conversations.clear()
+            // H1：逐条容错 —— 单条数据坏掉（缺字段/类型不符）只跳过该条，
+            // 不再让整库清空（原实现一个入口异常就被外层 catch 吃掉后 clear()）。
+            val loaded = java.util.ArrayList<Conversation>(data.conversations.size)
+            var skipped = 0
             data.conversations.forEach { entry ->
-                val conv = Conversation(
-                    id = entry.id, title = entry.title, systemPrompt = entry.systemPrompt,
-                    createdAt = entry.createdAt, updatedAt = entry.updatedAt,
-                    isStreaming = false, characterId = entry.characterId, worldInfoId = entry.worldInfoId,
-                    worldInfoIds = entry.worldInfoIds ?: emptyList(),
-                    isArchived = entry.isArchived ?: false,
-                    adventureRoleIds = entry.adventureRoleIds ?: emptyList(),
-                    // D8：必须显式用 CopyOnWriteArrayList —— 原来这里是 .toMutableList()，
-                    // 会绕开 Conversation 的默认值，导致**从磁盘加载回来的会话**
-                    // 又变回普通 ArrayList，线程安全修复只在新建会话上生效。
-                    messages = java.util.concurrent.CopyOnWriteArrayList(
-                        entry.messages.map { msg ->
-                            Message(
-                                role = msg.role, content = msg.content, timestamp = msg.timestamp,
-                                reasoningContent = msg.reasoningContent ?: "",
-                                attachmentType = msg.attachmentType, attachmentData = msg.attachmentData,
-                                attachmentName = msg.attachmentName
-                            )
-                        }
+                try {
+                    val conv = Conversation(
+                        id = entry.id, title = entry.title, systemPrompt = entry.systemPrompt,
+                        createdAt = entry.createdAt, updatedAt = entry.updatedAt,
+                        isStreaming = false, characterId = entry.characterId, worldInfoId = entry.worldInfoId,
+                        worldInfoIds = entry.worldInfoIds ?: emptyList(),
+                        isArchived = entry.isArchived ?: false,
+                        adventureRoleIds = entry.adventureRoleIds ?: emptyList(),
+                        // D8：必须显式用 CopyOnWriteArrayList —— 原来这里是 .toMutableList()，
+                        // 会绕开 Conversation 的默认值，导致**从磁盘加载回来的会话**
+                        // 又变回普通 ArrayList，线程安全修复只在新建会话上生效。
+                        messages = java.util.concurrent.CopyOnWriteArrayList(
+                            entry.messages.map { msg ->
+                                Message(
+                                    role = msg.role, content = msg.content, timestamp = msg.timestamp,
+                                    reasoningContent = msg.reasoningContent ?: "",
+                                    attachmentType = msg.attachmentType, attachmentData = msg.attachmentData,
+                                    attachmentName = msg.attachmentName
+                                )
+                            }
+                        )
                     )
-                )
-                conversations.add(conv)
+                    loaded.add(conv)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    skipped++
+                }
             }
+            if (skipped > 0) backupCorruptData(json)
+            conversations.clear()
+            conversations.addAll(loaded)
             val savedCurrentId = prefs.getString(KEY_CURRENT_ID, null)
             val idx = conversations.indexOfFirst { it.id == (savedCurrentId ?: data.currentId) }
             currentIndex = if (idx >= 0) idx else 0
@@ -704,9 +771,8 @@ object ConversationManager {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            conversations.clear()
-            conversations.add(Conversation())
-            currentIndex = 0
+            // H1：外层兜底同样不 clear —— 保留内存现状（通常是启动时的空库），
+            // 真正需要留底的场景已在上面备份。
         }
     }
 

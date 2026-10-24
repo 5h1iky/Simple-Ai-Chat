@@ -13,23 +13,55 @@ import java.util.Locale
  */
 object STChatLogImporter {
 
-    fun parse(jsonl: String): Result<List<Message>> = runCatching {
+    /** M18：导入结果 —— 消息 + 被跳过的坏行数 + 告警（无告警为 null） */
+    data class ImportReport(
+        val messages: List<Message>,
+        val skippedBadLines: Int = 0,
+        val warning: String? = null
+    )
+
+    /**
+     * M18：最近一次 parse / parseDetailed 的告警（无则为 null），例如"已跳过 N 行无法解析的内容"。
+     * 旧调用点（ChatActivity 等）只消费 Result<List<Message>>，可经此取到坏行告警。
+     */
+    @Volatile
+    var lastImportWarning: String? = null
+        private set
+
+    /** 兼容旧签名：只要消息列表；坏行告警见 [lastImportWarning]，或改用 [parseDetailed] */
+    fun parse(jsonl: String): Result<List<Message>> = parseDetailed(jsonl).map { it.messages }
+
+    /** M18：完整导入结果（含坏行统计与告警） */
+    fun parseDetailed(jsonl: String): Result<ImportReport> = runCatching {
         val messages = mutableListOf<Message>()
         var lastTimestamp = System.currentTimeMillis()
+        // M18：坏行不再静默丢弃 —— 统计数量并在结果里带出告警
+        var skippedBadLines = 0
 
-        jsonl.lineSequence().forEach { line ->
-            val trimmed = line.trim()
+        // M18：文件首行常带 UTF-8 BOM（\uFEFF），原来会让第一条消息解析失败被无声吞掉 —— 先剥掉
+        val text = jsonl.removePrefix("\uFEFF")
+
+        text.lineSequence().forEach { line ->
+            // M18：trim 时容忍残留 BOM（BOM 可能出现在行首）
+            val trimmed = line.trim { it == '\uFEFF' || it.isWhitespace() }
             if (trimmed.isEmpty()) return@forEach
             val obj = try {
                 JsonParser.parseString(trimmed).asJsonObject
             } catch (_: Exception) {
+                skippedBadLines++
                 return@forEach
             }
             val isUser = obj.get("is_user")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
             val isSystem = obj.get("is_system")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
-            val mes = obj.get("mes")?.takeIf { it.isJsonPrimitive }?.asString ?: return@forEach
+            val mesRaw = obj.get("mes")?.takeIf { it.isJsonPrimitive }?.asString
+            if (mesRaw == null) {
+                // 没有 mes 字段的行同样算坏行（解析不出可用内容）
+                skippedBadLines++
+                return@forEach
+            }
             // 空白消息导入进来只是空气泡，没有信息量，直接跳过
-            if (mes.isBlank()) return@forEach
+            if (mesRaw.isBlank()) return@forEach
+            val mes = mesRaw
 
             // P2：酒馆真实导出的 create_date 是 "2024-02-11 @13h 20m 19s 942ms" 风格、
             // send_date 是本地化字符串 —— 原实现三种 pattern 都匹配不上且不读 send_date，
@@ -64,9 +96,18 @@ object STChatLogImporter {
         }
 
         if (messages.isEmpty()) {
-            throw IllegalArgumentException("文件中没有可导入的聊天消息（不是酒馆 .jsonl 聊天记录？）")
+            // M18：全被跳过时把坏行数量带进错误信息（调用方经 e.message 展示，复用现有提示途径）
+            throw IllegalArgumentException(
+                if (skippedBadLines > 0) {
+                    "文件中没有可导入的聊天消息（跳过 $skippedBadLines 行无法解析的内容）"
+                } else {
+                    "文件中没有可导入的聊天消息（不是酒馆 .jsonl 聊天记录？）"
+                }
+            )
         }
-        messages
+        // M18：坏行统计随结果带出，不再无声丢失
+        val warning = if (skippedBadLines > 0) "已跳过 $skippedBadLines 行无法解析的内容" else null
+        ImportReport(messages, skippedBadLines, warning).also { lastImportWarning = it.warning }
     }
 
     /** 酒馆 create_date 的典型形态："2024-02-11 @13h 20m 19s 942ms"（也覆盖 ISO/常见分隔符） */

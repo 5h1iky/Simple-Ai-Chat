@@ -386,6 +386,8 @@ class ChatActivity : ComponentActivity() {
     override fun onDestroy() {
         ConversationManager.onConversationsChanged = null
         ConversationManager.onCurrentMessageUpdated = null
+        // M9：退出页面时取消全部 SSE 流，避免流回调持有已销毁 Activity
+        ConversationManager.cancelAllStreams()
         ConversationManager.save()
         super.onDestroy()
     }
@@ -451,6 +453,8 @@ class ChatActivity : ComponentActivity() {
                 } else {
                     MessageList(
                         messages = messagesState.value,
+                        // M16：传入会话 id（现有会话 id 状态），滚动状态/effect 按会话隔离
+                        conversationId = drawerCurrentId,
                         characterAvatar = characterAvatarState.value,
                         userAvatar = userAvatarState.value,
                         aiName = aiNameState.value,
@@ -1797,7 +1801,9 @@ class ChatActivity : ComponentActivity() {
             if (base64 != null) {
                 try {
                     val bytes = Base64.decode(base64, Base64.DEFAULT)
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+                    // H3：旧版本存的是全尺寸原图，直接 decodeByteArray 会 OOM 复崩；
+                    // 改用采样解码（2048 足够背景用途，覆盖屏幕尺寸上界）
+                    val bitmap = www.cetool.com.util.ImageDecoder.decodeByteArray(bytes, maxEdge = 2048) ?: return
                     val dm = resources.displayMetrics
                     val screenW = dm.widthPixels.coerceAtLeast(1)
                     val screenH = dm.heightPixels.coerceAtLeast(1)
@@ -1817,7 +1823,8 @@ class ChatActivity : ComponentActivity() {
                             tileModeY = android.graphics.Shader.TileMode.REPEAT
                         }
                     }
-                } catch (_: Exception) {}
+                    // H3：OutOfMemoryError 是 Error 不是 Exception，catch 要收宽到 Throwable
+                } catch (_: Throwable) {}
             }
         } else {
             backgroundDrawable = null
@@ -1893,6 +1900,9 @@ class ChatActivity : ComponentActivity() {
         isEmptyConversation = conv.messages.isEmpty()
         if (!isEmptyConversation) {
             messagesState.value = conv.messages.toList()
+        } else {
+            // L6：切到空会话时清空旧会话消息，避免残留上一会话内容
+            messagesState.value = emptyList()
         }
     }
 
@@ -1945,6 +1955,8 @@ class ChatActivity : ComponentActivity() {
                 appContext = applicationContext
             )
             runOnUiThread {
+                // M9：页面已销毁时不再触碰 UI/弹对话框
+                if (isDestroyed) return@runOnUiThread
                 showArchiving = false
                 result.fold(
                     onSuccess = { archive -> startArchiveConfirm(conv, archive) },
@@ -2153,8 +2165,13 @@ class ChatActivity : ComponentActivity() {
             when {
                 mimeType.startsWith("text/") || fileName.lowercase().endsWith(".txt") -> {
                     val inputStream = contentResolver.openInputStream(uri)
-                    val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-                    inputStream?.close()
+                    // L5：流为 null 时不能静默附加空附件并提示"已附加"，直接提示读取失败
+                    if (inputStream == null) {
+                        Toast.makeText(this, "读取文件失败", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+                    val text = inputStream.bufferedReader().use { it.readText() }
+                    inputStream.close()
 
                     if (text.length > 50000) {
                         Toast.makeText(this, R.string.file_too_large, Toast.LENGTH_SHORT).show()
@@ -2167,7 +2184,8 @@ class ChatActivity : ComponentActivity() {
                     inputHint = getString(R.string.attach_txt_hint, fileName, getString(R.string.hint_input))
                     Toast.makeText(this, R.string.toast_file_attached, Toast.LENGTH_SHORT).show()
                 }
-                mimeType.startsWith("image/") -> {
+                // L14：MIME 为空/未知时按文件名扩展名兜底判定图片，避免 .jpg/.png 被误报"不支持"
+                mimeType.startsWith("image/") || isImageExtension(fileName) -> {
                     // D3：全尺寸解码 + score catch 抓不住 OOM → 高像素图片直接崩。
                     // 改为采样解码（目标 2048px），并对 failure 统一提示。
                     val bitmap = www.cetool.com.util.ImageDecoder.decode(this, uri, maxEdge = 2048)
@@ -2210,6 +2228,13 @@ class ChatActivity : ComponentActivity() {
         val dot = name.lastIndexOf('.')
         if (dot <= 0) return "$name.jpg"
         return name.substring(0, dot) + ".jpg"
+    }
+
+    /** L14：MIME 为空/未知时按文件名扩展名兜底判定图片类型 */
+    private fun isImageExtension(name: String): Boolean {
+        val lower = name.lowercase()
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+            lower.endsWith(".gif") || lower.endsWith(".webp")
     }
 
     private fun getFileName(uri: Uri): String? {

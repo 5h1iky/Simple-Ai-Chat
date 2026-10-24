@@ -93,6 +93,9 @@ object SafeFiles {
         readText(file)?.takeIf { it.isNotBlank() }?.let { return it }
         val parent = file.parentFile ?: return null
         val tmp = File(parent, "${file.name}.tmp")
+        // L9：目标「合法但空白」不等于损坏。只有 tmp 不比目标旧时才允许顶替，
+        // 否则很久以前写失败遗留的 tmp 会把之后合法写入的空白内容顶掉。
+        if (file.exists() && tmp.lastModified() < file.lastModified()) return null
         return readText(tmp)?.takeIf { it.isNotBlank() }
     }
 }

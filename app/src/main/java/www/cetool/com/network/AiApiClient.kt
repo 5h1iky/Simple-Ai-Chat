@@ -221,7 +221,9 @@ class AiApiClient(
                 Endpoint(
                     url = config.apiUrl,
                     model = config.model,
-                    authHeader = "Bearer ${config.apiKey}",
+                    // L2：apiKey 为空（Ollama/LM Studio 等免密钥端点）时不发 Authorization 头，
+                    // 空令牌 `Bearer ` 会被部分服务端直接 401。
+                    authHeader = config.apiKey.trim().takeIf { it.isNotEmpty() }?.let { "Bearer $it" },
                     temperature = 0.7
                 )
             }
@@ -287,10 +289,11 @@ class AiApiClient(
             if (finished) return
             finished = true
             // 流结束时残留的「半截标签」按原文输出，避免静默丢字
+            // L7：残留内容按当前通道分发，inReasoning 时不应塞进正文
             if (tagBuffer.isNotEmpty()) {
                 val rest = tagBuffer
                 tagBuffer = ""
-                onText(rest)
+                if (inReasoning) onReasoning(rest) else onText(rest)
             }
             if (!modelReported) onModelInfo?.invoke(null, null)
             onFinish()
@@ -308,10 +311,11 @@ class AiApiClient(
         fun failStream(message: String) {
             if (finished) return
             finished = true
+            // L7：同 finishStream，残留按当前通道分发
             if (tagBuffer.isNotEmpty()) {
                 val rest = tagBuffer
                 tagBuffer = ""
-                onText(rest)
+                if (inReasoning) onReasoning(rest) else onText(rest)
             }
             if (!modelReported) onModelInfo?.invoke(null, null)
             onError(message)
@@ -336,7 +340,13 @@ class AiApiClient(
                     return
                 }
                 try {
-                    val chunk = gson.fromJson(data, ChatResponse::class.java)
+                    val chunk = try {
+                        gson.fromJson(data, ChatResponse::class.java)
+                    } catch (e: Exception) {
+                        // D7：分片 JSON 解析失败仅跳过该分片并记录，不影响后续
+                        android.util.Log.w("AiApiClient", "SSE 分片解析失败: ${e.message}", e)
+                        return
+                    }
                     if (chunk == null) return
 
                     // Free Gateway: 回调实际使用的模型名/服务商
@@ -373,46 +383,54 @@ class AiApiClient(
 
                     // P2：tagBuffer 必须真正发挥作用 —— 跨分片被切断的标签前缀先缓存，
                     // 与下一片拼接后再判定（原实现只赋空串，是从未生效的死代码）。
+                    // M2：整段恰好是标签前缀（holdLen == length）时同样要缓存 ——
+                    // 原来的 `holdLen < fullInput.length` 守卫会让落在分片边界上的
+                    // 半截标签（如单独一片 "<"）以字面文本泄漏、状态永不翻转。
+                    // 全缓存时 fullInput 为空，直接等下一片；流结束由 finishStream 冲刷。
                     var fullInput = tagBuffer + content
                     tagBuffer = ""
                     val holdLen = partialTagSuffix(fullInput)
-                    if (holdLen > 0 && holdLen < fullInput.length) {
+                    if (holdLen > 0) {
                         tagBuffer = fullInput.takeLast(holdLen)
                         fullInput = fullInput.dropLast(holdLen)
                     }
                     if (fullInput.isEmpty()) return
-                    val tagMatch = reasoningTagRegex.find(fullInput)
-                    if (tagMatch != null) {
-                        val tag = tagMatch.value.lowercase()
-                        val tagStart = tagMatch.range.first
-                        val tagEnd = tagMatch.range.last + 1
-
-                        // P2：闭合判定不能只看 "/" —— <|end_of_thought|> 不含 "/" 却是闭标签，
-                        // 原实现把它当开标签 → 其后正文全部进 reasoning 折叠区。
-                        val isClosing = tag.contains("/") || tag.startsWith("<|end")
-                        if (tagStart > 0) {
-                            val beforeTag = fullInput.substring(0, tagStart)
-                            if (inReasoning) onReasoning(beforeTag) else onText(beforeTag)
-                        }
-                        if (isClosing) {
-                            inReasoning = false
-                        } else {
-                            inReasoning = true
-                        }
-                        val afterTag = fullInput.substring(tagEnd)
-                        if (afterTag.isNotEmpty()) {
-                            if (inReasoning) onReasoning(afterTag) else onText(afterTag)
-                        }
-                    } else {
+                    // M1：一个分片里可能出现多个标签（如 "<think>ok</thinking>Done"），
+                    // 原实现只处理 find() 的第一个，闭合标签与正文被整段吐进 reasoning。
+                    // 改为遍历所有匹配、按序逐段分发（小型状态机）。
+                    val tagMatches = reasoningTagRegex.findAll(fullInput).toList()
+                    if (tagMatches.isEmpty()) {
                         if (inReasoning) onReasoning(fullInput) else onText(fullInput)
+                    } else {
+                        var pos = 0
+                        for (tagMatch in tagMatches) {
+                            val tagStart = tagMatch.range.first
+                            val tagEnd = tagMatch.range.last + 1
+                            if (tagStart > pos) {
+                                val segment = fullInput.substring(pos, tagStart)
+                                if (inReasoning) onReasoning(segment) else onText(segment)
+                            }
+                            // P2：闭合判定不能只看 "/" —— <|end_of_thought|> 不含 "/" 却是闭标签，
+                            // 原实现把它当开标签 → 其后正文全部进 reasoning 折叠区。
+                            val tag = tagMatch.value.lowercase()
+                            val isClosing = tag.contains("/") || tag.startsWith("<|end")
+                            inReasoning = !isClosing
+                            pos = tagEnd
+                        }
+                        if (pos < fullInput.length) {
+                            val tail = fullInput.substring(pos)
+                            if (inReasoning) onReasoning(tail) else onText(tail)
+                        }
                     }
 
                     if (choice.finish_reason == "stop") finishStream()
                 } catch (e: Exception) {
-                    // D7：原实现 catch (_: Exception) {} 会把「分片解析失败」与
-                    // 「onText/onReasoning 回调自身抛错」一起静默吞掉，线上完全无法定位。
-                    // 这里解析失败仅跳过该分片并记录；回调异常则透出给上层处理。
-                    android.util.Log.w("AiApiClient", "SSE 分片解析失败: ${e.message}", e)
+                    // L8：解析已在上方单独兜住；走到这里是 onText/onReasoning 回调
+                    // 自身抛错 —— 旧实现一并静默吞掉（与注释相反），分片丢失且无任何提示。
+                    // 现在上报错误并停流，避免用户看到缺字而不知情。
+                    android.util.Log.w("AiApiClient", "SSE 分片处理失败: ${e.message}", e)
+                    failStream("处理响应时出错: ${e.message ?: e.javaClass.simpleName}")
+                    eventSource.cancel()
                 }
             }
 
@@ -486,15 +504,19 @@ class AiApiClient(
                 }
                 val body = response.body?.string() ?: return Result.failure(Exception("空响应"))
                 val parsed = gson.fromJson(body, ChatResponse::class.java)
-                val content = parsed.choices?.firstOrNull()
-                    ?.message?.content?.asJsonPrimitive?.asString
+                // L3：content 可能是 JsonNull/JsonArray —— 裸 asJsonPrimitive 会抛异常
+                // 绕过下面的 delta 兜底；先判型再取值。
+                val content = parsed?.choices?.firstOrNull()
+                    ?.message?.content?.takeIf { it.isJsonPrimitive }?.asString
                 if (content.isNullOrBlank()) {
                     // 兼容返回在 delta 的情况（部分服务商非流式也用 delta）
-                    val delta = parsed.choices?.firstOrNull()?.delta?.content
+                    val delta = parsed?.choices?.firstOrNull()?.delta?.content
                     if (!delta.isNullOrBlank()) {
                         return Result.success(delta)
                     }
-                    return Result.failure(Exception("响应中没有内容"))
+                    // L3：响应体是 {"error":{...}} 时优先透传服务端真实错误
+                    val serverError = parsed?.error?.message
+                    return Result.failure(Exception(serverError ?: "响应中没有内容"))
                 }
                 Result.success(content)
             }

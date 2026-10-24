@@ -98,11 +98,19 @@ object ModelCatalog {
     /**
      * 免费判定：
      * - OpenKilo 直接给 `isFree` 标记，最可靠
-     * - OpenCode Zen 无该标记，退回按 id 里的 "free" 约定过滤
+     * - OpenCode Zen 无该标记，退回按 id 里的 "free" 约定过滤；
+     *   L20：先查白名单 —— `big-pickle`（见 SettingsKeys.ZEN_MODEL_BIG_PICKLE，
+     *   在 fallbackModels 兜底表里、实测可用）id 不含 "free"，原启发式会把它误滤掉，
+     *   联网拉取成功后用户选中的该模型消失并被 UI 误标"已不可用"。
+     *   id 在白名单内一律视为免费，其余仍走原有 contains("free") 启发式。
      */
+    private val ZEN_FREE_WHITELIST = setOf(
+        SettingsKeys.ZEN_MODEL_BIG_PICKLE
+    )
+
     private fun isFreeModel(mode: String, isFree: Boolean?, id: String): Boolean {
         return if (mode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN) {
-            id.contains("free", ignoreCase = true)
+            id in ZEN_FREE_WHITELIST || id.contains("free", ignoreCase = true)
         } else {
             isFree == true
         }

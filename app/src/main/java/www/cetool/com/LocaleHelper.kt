@@ -31,8 +31,30 @@ object LocaleHelper {
     @Volatile
     private var systemLocaleSnapshot: Locale? = null
 
-    /** 进程内记录一次原始系统 locale（只记录第一次） */
+    /**
+     * M17：未被本应用 wrap 的 base context（Application 级，进程内只记录第一次）。
+     * 用它读到的 `resources.configuration` 始终是**真实系统配置** ——
+     * 本应用 wrap 过的 Context（createConfigurationContext）里是被改写过的 locale，
+     * 而 Locale.setDefault 又污染 Locale.getDefault()，两者都不能用来"跟随系统"。
+     */
+    @Volatile
+    private var rawBaseContext: Context? = null
+
+    /** 进程内记录一次原始系统 locale（只记录第一次；M17 后仅作兜底回退） */
     private fun systemLocale(): Locale {
+        // M17：优先读「当前」系统配置的 locales[0] —— 系统语言可能在进程存活期间被改掉，
+        // 快照只反映进程启动那一刻，"跟随系统"必须跟着变。
+        rawBaseContext?.let { base ->
+            try {
+                // 拷贝一份 Configuration 再取值：避免被本应用 setLocale/setDefault
+                // 写回的值污染（坑见上方 E9 注释）
+                val config = Configuration(base.resources.configuration)
+                val current = config.locales.get(0)
+                if (current != null) return current
+            } catch (t: Throwable) {
+                // 读不到就走快照兜底
+            }
+        }
         systemLocaleSnapshot?.let { return it }
         synchronized(this) {
             systemLocaleSnapshot?.let { return it }
@@ -46,7 +68,8 @@ object LocaleHelper {
         return when (pref) {
             SettingsKeys.LANGUAGE_ZH -> Locale.SIMPLIFIED_CHINESE
             SettingsKeys.LANGUAGE_EN -> Locale.ENGLISH
-            // 跟随系统：用进程启动时快照下来的系统 locale。
+            // 跟随系统：M17 改读未被 wrap 的 base context 的当前系统配置（实时），
+            // 进程启动时的快照只作兜底。
             // E9：不能用 Locale.getDefault() —— apply() 已经把它覆盖掉了，
             // 那样"跟随系统"在进程存活期间永远无法恢复。
             else -> systemLocale()
@@ -63,6 +86,14 @@ object LocaleHelper {
 
     /** attachBaseContext 中调用：按偏好包装 Context 并同步全局默认 locale */
     fun apply(context: Context): Context {
+        // M17：记住未被本应用 wrap 的 base context（首次来自 Application.attachBaseContext，
+        // 是进程级 ContextImpl，无泄漏）；resolveLocale 的"跟随系统"分支用它读真实系统配置。
+        // 必须在 resolveLocale 之前记录。
+        if (rawBaseContext == null) {
+            synchronized(this) {
+                if (rawBaseContext == null) rawBaseContext = context
+            }
+        }
         val locale = resolveLocale(getLanguagePref(context))
         Locale.setDefault(locale)
         val config = Configuration(context.resources.configuration)

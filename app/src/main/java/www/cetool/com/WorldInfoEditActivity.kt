@@ -153,13 +153,26 @@ class WorldInfoEditActivity : ComponentActivity() {
                             Toast.makeText(this, getString(R.string.world_edit_name_empty), Toast.LENGTH_SHORT).show()
                             return@WorldInfoEditScreen
                         }
-                        if (editId != null) {
-                            WorldInfoManager.overwrite(this, editId!!, info)
-                        } else {
-                            WorldInfoManager.saveNew(this, info)
+                        // M7：必须检查写盘结果 —— 旧实现忽略返回值后无条件提示「已保存」
+                        // 并 finish()，磁盘满/IO 异常时用户以为保存成功，内容其实全丢。
+                        // 对照 CharacterEditActivity 的 C4 修复风格：整体兜异常，
+                        // 失败明确报错且**不 finish**，保住正在编辑的内容。
+                        val savedId = try {
+                            if (editId != null) {
+                                if (WorldInfoManager.overwrite(this, editId!!, info)) editId else null
+                            } else {
+                                WorldInfoManager.saveNewOrNull(this, info)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            null
+                        }
+                        if (savedId == null) {
+                            Toast.makeText(this, "保存失败：写入文件出错", Toast.LENGTH_SHORT).show()
+                            return@WorldInfoEditScreen
                         }
                         Toast.makeText(this, getString(R.string.world_edit_saved, info.name), Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_OK, Intent().putExtra("world_info_id", info.id))
+                        setResult(RESULT_OK, Intent().putExtra("world_info_id", savedId))
                         finish()
                     }
                 )
@@ -467,6 +480,45 @@ private fun EntryEditDialog(
     var showPositionPicker by remember { mutableStateOf(false) }
 
     fun save() {
+        // M20：数值字段不再「非法输入静默重置默认值」——旧实现 `toIntOrNull() ?: 默认值`
+        // 会把 "12 "、"0.5"、清空、含汉字都悄悄改写成默认值并持久化，用户无感知。
+        // 现在先 trim 再解析，非法输入 Toast 指出字段并中止保存。
+        val injectDepthVal = injectDepth.trim().toIntOrNull()
+        if (injectDepthVal == null) {
+            Toast.makeText(context, "注入深度无效：请输入整数", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val priorityVal = priority.trim().toIntOrNull()
+        if (priorityVal == null) {
+            Toast.makeText(context, "优先级无效：请输入整数", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val probabilityVal = probability.trim().toIntOrNull()
+        if (probabilityVal == null) {
+            Toast.makeText(context, "触发概率无效：请输入整数", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // M20：概率越界明确报错并中止（0..100；比静默钳制更可感知）
+        if (probabilityVal !in 0..100) {
+            Toast.makeText(context, "触发概率无效：请输入 0-100 的整数", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val scanDepthVal = scanDepth.trim().toIntOrNull()
+        if (scanDepthVal == null) {
+            Toast.makeText(context, "扫描深度无效：请输入整数", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // M20：注入/扫描深度按引擎实际消费范围做合理钳制（引擎侧 injectDepth≥0、
+        // scanDepth 使用时 coerceAtLeast(1)），越界钳制后给出提示，不再无声改写。
+        val injectDepthFinal = injectDepthVal.coerceIn(0, 10)
+        val scanDepthFinal = scanDepthVal.coerceIn(0, 10)
+        if (injectDepthFinal != injectDepthVal || scanDepthFinal != scanDepthVal) {
+            Toast.makeText(
+                context,
+                "注入/扫描深度超出 0-10，已调整为 $injectDepthFinal / $scanDepthFinal",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
         onSave(
             entry.copy(
                 // C5：空名就存空串，本地化的「未命名条目」只在显示层兜底
@@ -478,10 +530,10 @@ private fun EntryEditDialog(
                 secondaryKeys = splitKeywords(secondaryKeys, useRegex),
                 content = content,
                 position = position,
-                injectDepth = injectDepth.toIntOrNull() ?: 4,
-                priority = priority.toIntOrNull() ?: 1000,
-                probability = probability.toIntOrNull() ?: 100,
-                scanDepth = scanDepth.toIntOrNull() ?: 4,
+                injectDepth = injectDepthFinal,
+                priority = priorityVal,
+                probability = probabilityVal,
+                scanDepth = scanDepthFinal,
                 role = roleFilter.trim().ifBlank { null },
                 groupName = groupName.trim(),
                 // B31：这里的区间刻意放宽到 0..9999。
@@ -568,13 +620,15 @@ private fun EntryEditDialog(
                         }
                     }
 
+                    // M20：四个数值框与 groupWeight 同款数字过滤（只允许数字、限长），
+                    // 从入口减少空格/小数点/汉字等非法输入
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = priority, onValueChange = { priority = it }, label = { Text(context.getString(R.string.world_edit_priority)) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = probability, onValueChange = { probability = it }, label = { Text(context.getString(R.string.world_edit_probability)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = priority, onValueChange = { input -> priority = input.filter { it.isDigit() }.take(5) }, label = { Text(context.getString(R.string.world_edit_priority)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = probability, onValueChange = { input -> probability = input.filter { it.isDigit() }.take(5) }, label = { Text(context.getString(R.string.world_edit_probability)) }, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = injectDepth, onValueChange = { injectDepth = it }, label = { Text(context.getString(R.string.world_edit_inject_depth)) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = scanDepth, onValueChange = { scanDepth = it }, label = { Text(context.getString(R.string.world_edit_scan_depth)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = injectDepth, onValueChange = { input -> injectDepth = input.filter { it.isDigit() }.take(5) }, label = { Text(context.getString(R.string.world_edit_inject_depth)) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = scanDepth, onValueChange = { input -> scanDepth = input.filter { it.isDigit() }.take(5) }, label = { Text(context.getString(R.string.world_edit_scan_depth)) }, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(value = roleFilter, onValueChange = { roleFilter = it }, label = { Text(context.getString(R.string.world_edit_role_filter)) }, modifier = Modifier.weight(1f))

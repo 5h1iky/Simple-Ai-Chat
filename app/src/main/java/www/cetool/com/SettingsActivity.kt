@@ -496,6 +496,14 @@ class SettingsActivity : ComponentActivity() {
                     editor.putString(ApiConfig.KEY_URL, active.url)
                     editor.putString(ApiConfig.KEY_KEY, active.key)
                     editor.putString(ApiConfig.KEY_MODEL, active.model)
+                } else {
+                    // M6：CUSTOM 且无任何 API 条目（如切回自定义时自动删掉了预设条目）时，
+                    // 原实现什么都不写 → ai_config 永久残留上一次预设（Kilo/Zen）的
+                    // URL/密钥/模型，ChatActivity 读 ai_config 把对话静默发往错误网关。
+                    // 这里清掉残留，宁可让配置回到"未配置"也不能发错地方。
+                    editor.remove(ApiConfig.KEY_URL)
+                    editor.remove(ApiConfig.KEY_KEY)
+                    editor.remove(ApiConfig.KEY_MODEL)
                 }
             }
         }
@@ -595,9 +603,10 @@ class SettingsActivity : ComponentActivity() {
         ConversationManager.init(this)
         ConversationManager.setDefaultSystemPrompt(systemPromptText.trim())
 
-        if (apiEntries.isNotEmpty() && activeApiIndex < apiEntries.size) {
-            syncAiConfig()
-        }
+        // M6：原来只有条目非空才同步 ai_config —— CUSTOM 模式条目为空（active==null）时
+        // 跳过同步，上一次预设的 URL/密钥/模型在 ai_config 里永久残留。
+        // 改为无条件同步（syncAiConfig 内部会区分有无活动条目）。
+        syncAiConfig()
 
         Toast.makeText(this, getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
         // B17：原实现直接 startActivity，返回栈会变成 [Chat#1, Chat#2]，

@@ -23,6 +23,14 @@ import com.google.gson.stream.JsonWriter
  * 实现要点：只用一层 TypeAdapterFactory，对每个「基本类型 / 字符串 / 集合 / Map」
  * 在 **read 时**把 JsonToken.NULL 翻译成零值；对象类型不做包一层 delegate 的嵌套，
  * 因为对象内部每个字段会各自走到这里，逐级兜住即可（避免自引用递归）。
+ *
+ * H2 修订：**可空数值/布尔（Integer/Boolean 等装箱类型）不再翻译成 0/false**，
+ * 保留 null 原样返回。原因：这类字段（如 CharacterBookEntry.priority/scan_depth、
+ * ConversationEntry.isArchived）在业务代码里都用 `?: 默认值` 表达"未设置"语义，
+ * 翻译成 0 会让兜底永久失效（priority 变 0 乱序、scan_depth 变 0 只扫 1 条消息）。
+ * Kotlin 非空数值/布尔字段编译为 primitive（如 int/boolean），在 create() 里
+ * `raw.isPrimitive` 提前放行，不受本翻译影响，也不会被塞 null。
+ * String 与集合仍保留零值兜底（description/tags 等非空字段的 NPE 是本类存在的初衷）。
  */
 object NullSafeTypeAdapterFactory : TypeAdapterFactory {
 
@@ -67,17 +75,14 @@ object NullSafeTypeAdapterFactory : TypeAdapterFactory {
         Double::class.java, Float::class.java, Boolean::class.java
     )
 
+    /**
+     * H2：装箱数值/布尔/字符返回 null（保留"未设置"语义，交给调用方 `?:` 兜底）；
+     * 只有 String 保留 "" 零值（见类注释）。primitive 类型根本走不到这里
+     * （create() 对 `raw.isPrimitive` 提前返回 null）。
+     */
     @Suppress("UNCHECKED_CAST")
     private fun <T> zeroOf(raw: Class<*>): T? = when (raw) {
         String::class.java -> "" as T
-        Char::class.java, Char::class.javaObjectType -> '\u0000' as T
-        Int::class.java, Int::class.javaObjectType -> 0 as T
-        Long::class.java, Long::class.javaObjectType -> 0L as T
-        Short::class.java, Short::class.javaObjectType -> 0.toShort() as T
-        Byte::class.java, Byte::class.javaObjectType -> 0.toByte() as T
-        Double::class.java, Double::class.javaObjectType -> 0.0 as T
-        Float::class.java, Float::class.javaObjectType -> 0f as T
-        Boolean::class.java, Boolean::class.javaObjectType -> false as T
         else -> null
     }
 

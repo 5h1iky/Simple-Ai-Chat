@@ -20,7 +20,15 @@ data class Message(
      */
     fun displayText(): String {
         if (attachmentType != ATTACH_TYPE_TEXT || attachmentData == null) return content
-        return stripLegacyAttachmentPrefix(content)
+        val afterHeader = stripLegacyAttachmentPrefix(content)
+        // M3：旧格式正文是 `"[文件: 名]\n<文件全文>\n\n<用户输入>"`（旧版写入处拼的
+        // attachmentData），只剥头部会把文件全文留在正文里 → 与 file 块重复发送。
+        // 这里把紧随其后的全文段一并剥掉，只留用户实际输入。
+        return if (afterHeader.startsWith(attachmentData)) {
+            afterHeader.substring(attachmentData.length).removePrefix("\n\n")
+        } else {
+            afterHeader
+        }
     }
 
     companion object {

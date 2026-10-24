@@ -100,10 +100,12 @@ object WebSearchClient {
     private fun extractText(raw: String): String {
         val text = try {
             val obj = gson.fromJson(raw, JsonObject::class.java)
-            val fromChoices = obj?.getAsJsonArray("choices")
-                ?.firstOrNull()?.asJsonObject
+            // L4：choices 可能是对象、content 可能是 JsonNull/对象 —— 全部判型再取值，
+            // 避免抛异常落到 catch 的兜底分支。
+            val fromChoices = obj?.get("choices")?.takeIf { it.isJsonArray }?.asJsonArray
+                ?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject
                 ?.let { it.getAsJsonObject("message") ?: it.getAsJsonObject("delta") }
-                ?.get("content")?.asString
+                ?.get("content")?.takeIf { it.isJsonPrimitive }?.asString
             fromChoices
                 ?: listOf("results", "result", "answer", "text", "content", "data")
                     .firstNotNullOfOrNull { key ->
@@ -112,7 +114,9 @@ object WebSearchClient {
                 ?: obj?.get("data")?.toString()
                 ?: ""
         } catch (_: Exception) {
-            raw
+            // L4：解析失败返回空串 —— 原来回退成 raw，会把整个响应体
+            // （最多 4000 字符的原始 JSON）当"搜索结论"注入提示词，污染上下文。
+            ""
         }
         return text.trim().let {
             if (it.length > MAX_RESULT_CHARS) it.take(MAX_RESULT_CHARS) + "…" else it

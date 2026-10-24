@@ -68,7 +68,9 @@ object TavernCardImporter {
     }
 
     private fun parseRoot(root: com.google.gson.JsonObject): TavernCard {
-        val spec = root.get("spec")?.asString ?: ""
+        // M11：`"spec": null` 时裸 asString 抛 UnsupportedOperationException，
+        // 一路冒泡成「格式无效」误报。取值前排除 JsonNull（下同）。
+        val spec = root.get("spec")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
 
         // 带 entries 的是世界书，不是角色卡（顶层）。
         // 否则「有 name + description」的世界书会被下面的 v1 分支误判为角色卡，
@@ -91,7 +93,7 @@ object TavernCardImporter {
                 if (dataObj == null) throw IllegalArgumentException("缺少 data 字段")
                 TavernCard(
                     spec = spec,
-                    spec_version = root.get("spec_version")?.asString ?: "3.0",
+                    spec_version = root.get("spec_version")?.takeIf { it.isJsonPrimitive }?.asString ?: "3.0",
                     data = gson.fromJson(dataObj, TavernCardData::class.java),
                     avatarBase64 = topLevelAvatar(root)
                 )
@@ -110,7 +112,7 @@ object TavernCardImporter {
             dataObj != null && !looksLikeWorldBook(root, dataObj) -> {
                 TavernCard(
                     spec = spec.ifBlank { "chara_card_v2" },
-                    spec_version = root.get("spec_version")?.asString ?: "2.0",
+                    spec_version = root.get("spec_version")?.takeIf { it.isJsonPrimitive }?.asString ?: "2.0",
                     data = gson.fromJson(dataObj, TavernCardData::class.java),
                     avatarBase64 = topLevelAvatar(root)
                 )
@@ -156,13 +158,23 @@ object TavernCardImporter {
         root.get("avatarBase64")?.takeIf { it.isJsonPrimitive }?.asString
 
     /**
-     * 从 PNG 的 `tEXt` / `iTXt` 块里取出 `chara` 字段（base64 编码的角色卡 JSON）。
+     * 从 PNG 的 `tEXt` / `iTXt` 块里取出角色卡 JSON。
      *
      * PNG 结构：8 字节签名 + 若干 chunk，每个 chunk = [4字节长度][4字节类型][数据][4字节CRC]。
-     * - `tEXt`：keyword\0text，keyword 通常是 "chara"，text 是 base64
+     * - `tEXt`：keyword\0text，text 是 base64
      * - `iTXt`：keyword\0compressionFlag\0compressionMethod\0languageTag\0translatedKeyword\0text
+     *
+     * M10：V3 规范的关键字是 `ccv3`（内容为 UTF-8 JSON 的 base64），旧实现只认 `chara`：
+     * - 纯 V3 PNG 报「未找到角色卡数据」；
+     * - `chara`+`ccv3` 并存时取 `chara`，V3 专属字段全部丢失；
+     * - 空 `chara` 块直接 `return null` 中止整个扫描。
+     * 现在同时识别 `ccv3` 与 `chara` 并记录两者内容，优先 `ccv3`、回退 `chara`
+     * （两者解析出的 JSON 都走同一个 parseRoot）；单个块为空/解码失败只跳过该块
+     * 继续扫描，不再中止。
      */
     private fun extractJsonFromPng(bytes: ByteArray): String? {
+        var ccv3Json: String? = null
+        var charaJson: String? = null
         try {
             var offset = 8 // 跳过 PNG 签名
             while (offset + 8 <= bytes.size) {
@@ -174,27 +186,50 @@ object TavernCardImporter {
                     val parts = payload.split('\u0000', limit = 2)
                     val keyword = parts.getOrNull(0) ?: ""
                     val rest = parts.getOrNull(1) ?: ""
-                    if (keyword.equals("chara", ignoreCase = true)) {
+                    val isCcv3 = keyword.equals("ccv3", ignoreCase = true)
+                    val isChara = keyword.equals("chara", ignoreCase = true)
+                    if (isCcv3 || isChara) {
                         val text = if (type == "iTXt") {
                             // iTXt 头部有两个单字节标志、语言标签、翻译关键字，取最后一段
                             val segments = rest.split('\u0000')
                             segments.lastOrNull().orEmpty()
                         } else rest
-                        if (text.isBlank()) return null
-                        return try {
-                            String(android.util.Base64.decode(text, android.util.Base64.DEFAULT), Charsets.UTF_8)
-                        } catch (_: Exception) {
-                            // 有些工具直接写明文 JSON
-                            text
+                        // M10：坏块（空/解码失败）只跳过继续，不中止扫描；同关键字取首个有效块
+                        val decoded = decodeEmbeddedCard(text)
+                        if (decoded != null) {
+                            if (isCcv3) {
+                                if (ccv3Json == null) ccv3Json = decoded
+                            } else if (charaJson == null) {
+                                charaJson = decoded
+                            }
                         }
                     }
                 }
                 offset += 12 + length
             }
         } catch (_: Exception) {
-            return null
+            // 结构异常不再整单作废：保留已扫到的块结果继续兜底
         }
-        return null
+        // V3 规范：ccv3 优先，chara 回退
+        return ccv3Json ?: charaJson
+    }
+
+    /**
+     * M10：单个 tEXt/iTXt 块内容 → 卡 JSON 文本。
+     * 先按 base64 解码（chara/ccv3 都是 base64），失败按明文 JSON 兜底；
+     * 内容为空、或解码结果不是 JSON 对象的返回 null（调用方跳过该块继续）。
+     */
+    private fun decodeEmbeddedCard(text: String): String? {
+        if (text.isBlank()) return null
+        val decoded = try {
+            String(android.util.Base64.decode(text, android.util.Base64.DEFAULT), Charsets.UTF_8)
+        } catch (_: Exception) {
+            // 有些工具直接写明文 JSON
+            text
+        }
+        return decoded.takeIf {
+            runCatching { JsonParser.parseString(it).isJsonObject }.getOrDefault(false)
+        }
     }
 
     private fun readInt32BE(bytes: ByteArray, offset: Int): Int {

@@ -37,9 +37,11 @@ object ImageDecoder {
                     inSampleSize = calculateInSampleSize(bounds.first, bounds.second, maxEdge)
                 }
             }
-            open(context, uri).use { stream ->
+            val decoded = open(context, uri).use { stream ->
                 stream?.let { BitmapFactory.decodeStream(it, null, options) }
             }
+            // M14：采样解码结果最长边仍可能落在 [maxEdge, 2×maxEdge)，解码后精确缩放一次收口
+            scaleToMaxEdge(decoded, maxEdge)
         } catch (e: OutOfMemoryError) {
             null
         } catch (e: Exception) {
@@ -47,6 +49,11 @@ object ImageDecoder {
         }
     }
 
+    /**
+     * 从字节数组采样解码（H3/M13：SharedPreferences 里的 base64 图可能存的是全尺寸原图）。
+     * 整体 `catch (Throwable)`：OOM 是 Error 不是 Exception。
+     * @return 解码后的 Bitmap，失败返回 null
+     */
     fun decodeByteArray(data: ByteArray, maxEdge: Int = 1024): Bitmap? {
         return try {
             if (data.isEmpty()) return null
@@ -60,10 +67,9 @@ object ImageDecoder {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
                 if (maxEdge > 0) inSampleSize = calculateInSampleSize(w, h, maxEdge)
             }
-            BitmapFactory.decodeByteArray(data, 0, data.size, options)
-        } catch (e: OutOfMemoryError) {
-            null
-        } catch (e: Exception) {
+            // M14：解码后精确等比缩放，确保最长边不超过 maxEdge
+            scaleToMaxEdge(BitmapFactory.decodeByteArray(data, 0, data.size, options), maxEdge)
+        } catch (_: Throwable) {
             null
         }
     }
@@ -95,6 +101,26 @@ object ImageDecoder {
             sample *= 2
         }
         return sample
+    }
+
+    /**
+     * M14：二次采样只能落到 [maxEdge, 2×maxEdge) 区间，解码后按 maxEdge 精确等比缩放一次，
+     * 使最终最长边满足 calculateInSampleSize 的注释契约（不超过 maxEdge）。
+     * 仅当 createScaledBitmap 返回了新对象时才回收旧 bitmap。
+     */
+    private fun scaleToMaxEdge(bitmap: Bitmap?, maxEdge: Int): Bitmap? {
+        if (bitmap == null || maxEdge <= 0) return bitmap
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= maxEdge) return bitmap
+        val scale = maxEdge.toFloat() / longest
+        val scaled = Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * scale).toInt().coerceAtLeast(1),
+            (bitmap.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+        if (scaled !== bitmap) bitmap.recycle()
+        return scaled
     }
 
     /**
