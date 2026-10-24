@@ -2,6 +2,7 @@ package www.cetool.com.network
 
 import com.google.gson.Gson
 import android.content.Context
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,6 +35,29 @@ class AiApiClient(
     // 改成共享单例，超时差异用 newBuilder() 派生（会复用连接池与线程池）。
     private val client by lazy { SHARED_CLIENT }
 
+    /**
+     * P2（跨分片标签）：返回文本尾部「可能是某个思维链标签前缀」的长度（0 = 无）。
+     * 这部分字符要缓存到下一片再判定，否则半截标签会以字面文本泄漏进正文，
+     * 且被切断的开标签不翻转 inReasoning → 整段思维链按正文输出。
+     * （与下方 reasoningTagRegex 的标签集合保持一致。）
+     */
+    private val reasoningTags = listOf(
+        "<think>", "<thinking>", "<reason>", "<reasoning>", "<thought>", "<|begin_of_thought|>",
+        " ...", "</thinking>", "</reason>", "</reasoning>", "</thought>", "<|end_of_thought|>"
+    )
+
+    private fun partialTagSuffix(text: String): Int {
+        if (text.isEmpty()) return 0
+        val lower = text.lowercase()
+        val maxLen = reasoningTags.maxOf { it.length }
+        for (k in 1 until maxLen) {
+            if (k > lower.length) break
+            val suffix = lower.takeLast(k)
+            if (reasoningTags.any { it.length > k && it.lowercase().startsWith(suffix) }) return k
+        }
+        return 0
+    }
+
     private val reasoningTagRegex = Regex(
         "(<think>|<thinking>|<reason>|<reasoning>|<thought>|<\\|begin_of_thought\\|>|" +
         "</think>|</thinking>|</reason>|</reasoning>|</thought>|<\\|end_of_thought\\|>)",
@@ -57,6 +81,20 @@ class AiApiClient(
 
     companion object {
         private const val KEY_SESSION_ID = "zen_session_id"
+
+        /**
+         * P2：Base URL 带 query/fragment 时字符串拼接会把追加路径拼进查询串/片段
+         *（如 `https://host/v1?api-version=x` → `...?api-version=x/chat/completions`，
+         * 请求仍打到 /v1 且 404）。用 HttpUrl 在**路径段**上追加，query/fragment 保持原位。
+         */
+        fun appendPath(baseUrl: String, path: String): String {
+            val httpUrl = baseUrl.toHttpUrlOrNull()
+                ?: return "${baseUrl.trimEnd('/')}/$path"
+            return httpUrl.newBuilder()
+                .addPathSegments(path.trim('/'))
+                .build()
+                .toString()
+        }
 
         /** D6：进程内共享的 OkHttpClient（连接池 / 线程池复用） */
         private val SHARED_CLIENT: OkHttpClient by lazy {
@@ -126,7 +164,7 @@ class AiApiClient(
                 }
 
                 val requestBuilder = Request.Builder()
-                    .url("${url.trimEnd('/')}/models")
+                    .url(appendPath(url, "models"))
                     .get()
                 headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
 
@@ -222,7 +260,7 @@ class AiApiClient(
         val requestBody = jsonBody.toRequestBody(jsonMediaType)
 
         // 确保 Base URL 无重复斜杠后拼接 /chat/completions
-        val url = "${endpoint.url.trimEnd('/')}/chat/completions"
+        val url = appendPath(endpoint.url, "chat/completions")
 
         val requestBuilder = Request.Builder()
             .url(url)
@@ -248,6 +286,12 @@ class AiApiClient(
         fun finishStream() {
             if (finished) return
             finished = true
+            // 流结束时残留的「半截标签」按原文输出，避免静默丢字
+            if (tagBuffer.isNotEmpty()) {
+                val rest = tagBuffer
+                tagBuffer = ""
+                onText(rest)
+            }
             if (!modelReported) onModelInfo?.invoke(null, null)
             onFinish()
         }
@@ -264,6 +308,11 @@ class AiApiClient(
         fun failStream(message: String) {
             if (finished) return
             finished = true
+            if (tagBuffer.isNotEmpty()) {
+                val rest = tagBuffer
+                tagBuffer = ""
+                onText(rest)
+            }
             if (!modelReported) onModelInfo?.invoke(null, null)
             onError(message)
         }
@@ -272,7 +321,16 @@ class AiApiClient(
             override fun onEvent(
                 eventSource: EventSource, id: String?, type: String?, data: String
             ) {
-                if (type != null && type != "message") return
+                if (finished) return
+                if (type != null && type != "message") {
+                    // P2：带 event: 头的错误帧（如 event: error）不能静默丢弃，
+                    // 否则连接关闭后走 onClosed→finishStream，一轮被当作正常完成收尾。
+                    if (type.equals("error", ignoreCase = true)) {
+                        failStream(data.ifBlank { "服务端错误事件" })
+                        eventSource.cancel()
+                    }
+                    return
+                }
                 if (data == "[DONE]") {
                     finishStream()
                     return
@@ -288,27 +346,50 @@ class AiApiClient(
                     }
 
                     val choice = chunk.choices?.firstOrNull()
-                    if (choice == null) { if (chunk.error != null) onError(chunk.error.message ?: "未知错误"); return }
+                    if (choice == null) {
+                        // P1：SSE 错误事件必须走 failStream（置 finished + 补报模型获取失败）并停掉流 ——
+                        // 原实现直调 onError：顶栏卡「正在获取模型…」、后续分片继续追加到错误文本之后、
+                        // onClosed 还会再触发 onFinish"成功收尾"一次。
+                        if (chunk.error != null) {
+                            failStream(chunk.error.message ?: "未知错误")
+                            eventSource.cancel()
+                        }
+                        return
+                    }
 
                     if (choice.delta?.reasoning_content != null) {
                         onReasoning(choice.delta.reasoning_content!!)
                     }
 
-                    val content = choice.delta?.content ?: choice.message?.content?.asJsonPrimitive?.asString ?: ""
+                    // P2：message.content 可能是 JsonNull/JsonArray —— asJsonPrimitive 对
+                    // 非原始元素抛 IllegalStateException，会把整个 chunk（含 finish_reason）静默丢掉。
+                    val content = choice.delta?.content
+                        ?: choice.message?.content?.takeIf { it.isJsonPrimitive }?.asString
+                        ?: ""
                     if (content.isEmpty()) {
                         if (choice.finish_reason == "stop") finishStream()
                         return
                     }
 
-                    val fullInput = tagBuffer + content
+                    // P2：tagBuffer 必须真正发挥作用 —— 跨分片被切断的标签前缀先缓存，
+                    // 与下一片拼接后再判定（原实现只赋空串，是从未生效的死代码）。
+                    var fullInput = tagBuffer + content
                     tagBuffer = ""
+                    val holdLen = partialTagSuffix(fullInput)
+                    if (holdLen > 0 && holdLen < fullInput.length) {
+                        tagBuffer = fullInput.takeLast(holdLen)
+                        fullInput = fullInput.dropLast(holdLen)
+                    }
+                    if (fullInput.isEmpty()) return
                     val tagMatch = reasoningTagRegex.find(fullInput)
                     if (tagMatch != null) {
                         val tag = tagMatch.value.lowercase()
                         val tagStart = tagMatch.range.first
                         val tagEnd = tagMatch.range.last + 1
 
-                        val isClosing = tag.contains("/")
+                        // P2：闭合判定不能只看 "/" —— <|end_of_thought|> 不含 "/" 却是闭标签，
+                        // 原实现把它当开标签 → 其后正文全部进 reasoning 折叠区。
+                        val isClosing = tag.contains("/") || tag.startsWith("<|end")
                         if (tagStart > 0) {
                             val beforeTag = fullInput.substring(0, tagStart)
                             if (inReasoning) onReasoning(beforeTag) else onText(beforeTag)
@@ -339,10 +420,16 @@ class AiApiClient(
                 eventSource: EventSource, t: Throwable?, response: okhttp3.Response?
             ) {
                 if (finished) return
-                val errorMsg = if (response != null) {
-                    "HTTP ${response.code}: ${response.message}"
-                } else {
-                    t?.message ?: "未知网络错误"
+                // P1：okhttp 在「读流中途失败 / cancel() / Content-Type 非法」时同样带着
+                // **非空 response**（200）回调本方法。原实现见 response 非空就只报
+                // "HTTP 200: OK"、把 t 整个丢弃 —— 断流/超时/取消全部显示成 HTTP 200。
+                // 真实 HTTP 错误码优先报状态行，其余优先报 t 的真实原因。
+                val errorMsg = when {
+                    response != null && !response.isSuccessful ->
+                        "HTTP ${response.code}: ${response.message}"
+                    t?.message != null -> t!!.message!!
+                    response != null -> "流意外中断（HTTP ${response.code}）"
+                    else -> "未知网络错误"
                 }
                 failStream(errorMsg)
             }
@@ -378,7 +465,7 @@ class AiApiClient(
 
             val jsonBody = gson.toJson(chatRequest)
             val requestBody = jsonBody.toRequestBody(jsonMediaType)
-            val url = "${endpoint.url.trimEnd('/')}/chat/completions"
+            val url = appendPath(endpoint.url, "chat/completions")
 
             val requestBuilder = Request.Builder()
                 .url(url)

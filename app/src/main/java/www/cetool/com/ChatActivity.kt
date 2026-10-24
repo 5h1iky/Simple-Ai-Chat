@@ -327,9 +327,11 @@ class ChatActivity : ComponentActivity() {
         val settingsSp = getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
         providerMode = settingsSp.getString(SettingsKeys.KEY_PROVIDER_MODE, SettingsKeys.PROVIDER_CUSTOM)
             ?: SettingsKeys.PROVIDER_CUSTOM
+        // P1：入口校验只要求地址合法 —— key/model 允许为空（Ollama 等免密钥端点，
+        // 设置页也允许保存空 key/model）。原用 isValid() 会把这类端点弹回设置页死循环。
         val configUsable = providerMode == SettingsKeys.PROVIDER_OPEN_KILO ||
             providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN ||
-            apiConfig.isValid()
+            apiConfig.hasUsableUrl()
         if (!configUsable) {
             Toast.makeText(this, R.string.toast_please_config, Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -582,7 +584,7 @@ class ChatActivity : ComponentActivity() {
                             webSearchEnabled = !webSearchEnabled
                             getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
                                 .edit().putBoolean(SettingsKeys.KEY_WEB_SEARCH_ENABLED, webSearchEnabled).apply()
-                            Toast.makeText(ctx, if (webSearchEnabled) getString(R.string.menu_web_search_off) else getString(R.string.menu_web_search_on), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, if (webSearchEnabled) getString(R.string.menu_web_search_on) else getString(R.string.menu_web_search_off), Toast.LENGTH_SHORT).show()
                         }
                     }
                     MenuItem(Icons.Filled.Tune, if (thinkingEnabled) getString(R.string.menu_thinking_level, thinkingLevel) else getString(R.string.menu_thinking_off)) {
@@ -606,7 +608,12 @@ class ChatActivity : ComponentActivity() {
                         chatLogImportLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     }
                     MenuItem(Icons.Filled.Search, getString(R.string.menu_search)) { showSearch = true }
-                    MenuItem(Icons.Filled.Edit, getString(R.string.menu_edit_system_prompt)) { showEditSystemPrompt = true }
+                    MenuItem(Icons.Filled.Edit, getString(R.string.menu_edit_system_prompt)) {
+                        // P1：打开对话框前必须载入当前提示词 —— 原实现只置标志，
+                        // 文本框永远是空串或上个会话的残留文本，点保存即覆盖 conv.systemPrompt。
+                        editSystemPromptText = currentConversation?.systemPrompt ?: ""
+                        showEditSystemPrompt = true
+                    }
                 }
             }
             if (isStreaming) {
@@ -2101,23 +2108,28 @@ class ChatActivity : ComponentActivity() {
 
         val lastUserMsg = conv.messages[lastUserIdx]
 
+        // P2：错误判定不能用宽泛的 contains —— AI 正常台词含字面 "[错误:" 会被误判成
+        // 错误消息，重试会把整轮用户+助手消息删掉并自动重发（正常回复被销毁）。
+        // 错误文本总是以 "[错误:" 开头或以 "\n\n[错误:" 追加，按此收窄。
+        val lastMsgContent = conv.messages.last().content
         val hasError = conv.messages.size > lastUserIdx + 1
             && conv.messages.last().role == Message.ROLE_ASSISTANT
-            && conv.messages.last().content.contains("[错误:")
+            && (lastMsgContent.trimStart().startsWith("[错误:") || lastMsgContent.contains("\n\n[错误:"))
 
         // B10：这里原本直接用 content —— 旧格式消息的 "[文件: 名]\n<全文>" 前缀会被
         // 当成用户输入重发，同时附件丢失。统一用 displayText() 剥离该前缀。
         val lastUserText = lastUserMsg.displayText()
 
+        // P2：非错误分支也要恢复待发附件 —— 原实现只把正文放回输入框就 return，
+        // 附件静默丢失，"重试"不再等于重发同一条消息。
+        pendingAttachmentType = lastUserMsg.attachmentType
+        pendingAttachmentData = lastUserMsg.attachmentData
+        pendingAttachmentName = lastUserMsg.attachmentName
+
         if (!hasError) {
             inputText = lastUserText
             return
         }
-
-        // B10②：把该消息的附件恢复成待发送附件，重试才等于「重发同一条消息」
-        pendingAttachmentType = lastUserMsg.attachmentType
-        pendingAttachmentData = lastUserMsg.attachmentData
-        pendingAttachmentName = lastUserMsg.attachmentName
 
         conv.messages.removeAt(conv.messages.size - 1)
         conv.messages.removeAt(lastUserIdx)

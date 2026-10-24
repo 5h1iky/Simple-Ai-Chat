@@ -281,7 +281,13 @@ class SettingsActivity : ComponentActivity() {
         val snapshotJson = sp.getString(SettingsKeys.KEY_PROVIDER_MANUAL_SNAPSHOT, null)
         if (!snapshotJson.isNullOrBlank()) {
             val type = object : TypeToken<List<SettingsKeys.ApiEntry>>() {}.type
-            manualEntriesSnapshot = gson.fromJson(snapshotJson, type)
+            // P2：与 loadSettings 对 KEY_API_CONFIGS 的兜底一致 —— prefs 损坏时
+            // fromJson 抛 JsonSyntaxException 会直接穿透 onCreate 让设置页崩溃。
+            manualEntriesSnapshot = try {
+                gson.fromJson(snapshotJson, type)
+            } catch (_: Exception) {
+                null
+            }
             manualActiveIndexSnapshot = sp.getInt(SettingsKeys.KEY_PROVIDER_MANUAL_ACTIVE_INDEX, 0)
             autoCreatedByPreset = sp.getBoolean(SettingsKeys.KEY_PROVIDER_AUTO_CREATED, false)
         }

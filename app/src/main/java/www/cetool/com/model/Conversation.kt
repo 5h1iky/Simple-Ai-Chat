@@ -53,7 +53,11 @@ data class Conversation(
         fun generateTitle(messages: List<Message>): String {
             val firstUser = messages.firstOrNull { it.role == Message.ROLE_USER }
             if (firstUser != null) {
-                val text = firstUser.content.trim()
+                // P2：① 纯附件消息 content 为空 —— 原实现返回 "" 并被永久固化为空标题；
+                // ② 旧格式附件消息用 content 会把 "[文件: 名]\n<全文>" 开头截进标题，
+                //    统一走 displayText() 剥离该前缀。
+                val text = firstUser.displayText().trim()
+                if (text.isBlank()) return DEFAULT_TITLE
                 return if (text.length <= 20) text else text.take(20) + "…"
             }
             return DEFAULT_TITLE

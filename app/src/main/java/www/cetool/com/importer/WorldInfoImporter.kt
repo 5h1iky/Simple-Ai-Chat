@@ -197,7 +197,9 @@ object WorldInfoImporter {
             priority = e.priority ?: e.insertion_order,
             position = position,
             content = content,
-            injectDepth = e.scan_depth ?: 4,
+            // P2：scan_depth 是「扫描深度」，绝不能塞进 injectDepth（@D 注入深度）——
+            // 角色书条目只落 before/after_char 两个槽，注入深度用默认 0。
+            injectDepth = 0,
             role = null,
             keywords = finalKeywords,
             useRegex = useRegex,
@@ -222,7 +224,9 @@ object WorldInfoImporter {
 
         // 关键词：当前版 keys / 旧版 key / 兜底 keywords
         var keywords = strList(first(entry, "keys", "key", "keywords"))
-        var useRegex = bool(entry.get("useRegex"), false)
+        // P1：酒馆把正则标志放在 extensions.use_regex（顶层 useRegex 是本项目自有写法，
+        // 酒馆文件没有）。原实现只读顶层 → 酒馆里勾了 Regex 的裸正则键全被按字面匹配。
+        var useRegex = bool(extOrTop(ext, entry, "use_regex", "useRegex"), false)
         // 酒馆行为：以 /.../ 形式书写的 key 自动视为正则，去掉定界斜杠
         if (!useRegex && keywords.any { looksLikeRegex(it) }) {
             useRegex = true
@@ -427,10 +431,19 @@ object WorldInfoImporter {
     }
 
     /**
-     * 判断关键词是否为正则形式：以 "/" 开头且内部还有 "/"（支持 "/pattern/" 与 "/pattern/flags" 两种写法）
+     * 判断关键词是否为正则形式："/pattern/" 或 "/pattern/flags"。
+     *
+     * P2：原判定「以 / 开头且内部还有 /」会把字面关键词 `/api/v1` 误判为正则并截断
+     *（B6 注释点名要保护的例子实际未修）。真正的内联正则必须以收尾斜杠
+     *（或斜杠 + 合法 flags）结束，中间的斜杠是模式内容：
+     * `/api/v1` 尾部 "v1" 不是 flags → 字面关键词；`/foo/i`、`/\d+/` → 正则。
      */
     private fun looksLikeRegex(keyword: String): Boolean {
-        return keyword.length > 2 && keyword.startsWith("/") && keyword.lastIndexOf('/') > 0
+        if (keyword.length < 3 || !keyword.startsWith("/")) return false
+        val lastSlash = keyword.lastIndexOf('/')
+        if (lastSlash <= 0) return false
+        val tail = keyword.substring(lastSlash + 1)
+        return tail.isEmpty() || tail.all { it.lowercaseChar() in "imsuxd" }
     }
 
     /**
@@ -440,6 +453,8 @@ object WorldInfoImporter {
     private fun stripRegexDelimiters(keyword: String): String {
         if (!looksLikeRegex(keyword)) return keyword
         val lastSlash = keyword.lastIndexOf('/')
-        return if (lastSlash > 0) keyword.substring(1, lastSlash) else keyword.substring(1, keyword.length - 1)
+        val stripped = keyword.substring(1, lastSlash)
+        // `//x` 之类剥完为空 → 保留原文，避免关键词被静默丢弃（B6）
+        return stripped.ifBlank { keyword }
     }
 }

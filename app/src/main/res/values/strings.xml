@@ -412,6 +412,7 @@
     <string name="pos_after_examples">示例对话后</string>
     <string name="pos_at_depth">@ 深度注入</string>
     <string name="world_edit_name_empty">名称不能为空</string>
+    <string name="world_edit_load_failed">世界书文件损坏，无法编辑（已阻止覆盖原文件）</string>
     <string name="world_edit_saved">世界书「%s」已保存</string>
     <string name="world_edit_title">编辑世界书</string>
     <string name="world_edit_basic">基本信息</string>
@@ -438,7 +439,7 @@
     <string name="world_edit_keywords_regex_hint">正则模式：一行一个关键词，逗号可安全使用（如 a{1,3}）</string>
     <string name="world_edit_entry_meta">%1$s | 优先级 %2$d</string>
     <string name="world_edit_entry_title">编辑条目</string>
-    <string name="world_edit_keywords">关键词（逗号分隔，/.../ 视为正则）</string>
+    <string name="world_edit_keywords">关键词（每行一个，/.../ 视为正则）</string>
     <string name="world_edit_secondary_keys">次级关键词（可选过滤）</string>
     <string name="world_edit_content">内容</string>
     <string name="world_edit_position">注入位置</string>

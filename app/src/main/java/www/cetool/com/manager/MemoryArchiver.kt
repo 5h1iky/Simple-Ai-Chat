@@ -90,15 +90,15 @@ object MemoryArchiver {
 
         // 2. 组装输入（角色卡现状 + 已有关系/事件）
         val fields = card.data.getCharacterFields()
-        val inputText = buildString {
+        val headerText = buildString {
             append("【角色卡】\n")
             append(CharacterCompiler.compileMarkdown(card.data.name, fields))
             append("\n\n【已有关系类型】\n").append(fields.userRelationType.ifBlank { "暂无" })
             append("\n【已有相处模式】\n").append(fields.userInteractionModel.ifBlank { "暂无" })
             append("\n【已有关系底线】\n").append(fields.userRelationBottomLine.ifBlank { "暂无" })
             append("\n【已有关键事件】\n").append(fields.keyEvents.ifBlank { "暂无共同经历的关键事件" })
-            append("\n\n【本次对话记录】\n").append(chatHistory)
         }
+        val inputText = headerText + "\n\n【本次对话记录】\n" + chatHistory
 
         // 3. 请求模型
         val systemMessage = MessageItem.text("system", SYSTEM_PROMPT)
@@ -111,7 +111,14 @@ object MemoryArchiver {
         if (result.isFailure && retry) {
             // D10：原实现的重试是**完全相同的请求** —— 若失败原因是上下文超长，
             // 重试必然同样失败。这里做真正的降级：把对话记录截到一半再试一次。
-            val shortened = inputText.take(inputText.length / 2)
+            //
+            // P2：截断必须丢「最旧」而不是「最新」—— 原实现 `inputText.take(length/2)`
+            // 保留头部 + **最旧**的半段对话，恰好丢掉最新的关系变化/关键事件，
+            // 与 D10「保留最近发生的事」的意图相反。保留角色卡头部，
+            // 只把对话记录截到最近的一半。
+            val shortened = headerText + "\n\n【本次对话记录】\n" +
+                chatHistory.takeLast((chatHistory.length / 2).coerceAtLeast(1)).trimStart('\n') +
+                "\n\n（对话记录因长度限制已省略较早部分）"
             result = client.requestJson(
                 listOf(systemMessage, MessageItem.text("user", shortened)),
                 temperature = 0.0,

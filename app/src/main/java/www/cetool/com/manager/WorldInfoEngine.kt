@@ -46,8 +46,11 @@ object WorldInfoEngine {
 
             val searchSpace = buildSearchSpace(messages, promptItems, entry)
             for (text in searchSpace) {
-                if (entry.matches(text) && passesSelective(entry, text) && passesProbability(entry)) {
-                    hits.add(entry)
+                if (entry.matches(text) && passesSelective(entry, text)) {
+                    // P2：概率骰每条目每次生成只掷**一次**（酒馆语义）。
+                    // 原实现放在 per-message 循环里「每条命中消息 roll 一次直到成功」，
+                    // 触发率随命中消息数膨胀（10% × 4 命中 ≈ 34%）。
+                    if (passesProbability(entry)) hits.add(entry)
                     break
                 }
             }
@@ -117,17 +120,15 @@ object WorldInfoEngine {
         }
     }
 
+    /**
+     * 单条次级关键词匹配。
+     * P2：ALL / NOT ALL 路径必须与 ANY 路径同一匹配规则 ——
+     * 原实现这里是裸 contains，忽略 wholeWords/整词边界，同一条次级键
+     * 在 ANY 下不匹配 "scatter"、在 ALL 下却匹配，行为自相矛盾。
+     * 正则模式也同病（模式串被 lowercase 改义），统一交回 WorldEntry.matchOne。
+     */
     private fun secondaryMatches(entry: WorldEntry, keyword: String, text: String): Boolean {
-        val compareText = if (entry.caseSensitive) text else text.lowercase()
-        val kw = if (entry.caseSensitive) keyword else keyword.lowercase()
-        return if (entry.useRegex) {
-            try {
-                val regex = if (entry.caseSensitive) Regex(kw) else Regex(kw, RegexOption.IGNORE_CASE)
-                regex.containsMatchIn(text)
-            } catch (_: Exception) { false }
-        } else {
-            compareText.contains(kw)
-        }
+        return entry.matchesSecondaryKeyword(keyword, text)
     }
 
     /** 概率过滤（酒馆 Probability / Trigger %） */
@@ -252,7 +253,9 @@ object WorldInfoEngine {
             afterCharDefs = wrapSection(afterCharDefs),
             beforeExamples = wrapSection(beforeExamples),
             afterExamples = wrapSection(afterExamples),
-            atDepth = atDepth.sortedBy { it.injectDepth }
+            // P2（多条 @D 挤位）：按深度**从深到浅**排序交给消费端逐条插入 ——
+            // 每次插入都会让列表 size+1，降序插入才能保证后续浅条目落在正确下标。
+            atDepth = atDepth.sortedByDescending { it.injectDepth }
         )
     }
 

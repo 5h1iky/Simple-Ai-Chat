@@ -18,6 +18,16 @@ object WorldInfoManager {
         return File(context.filesDir, DIR_NAME).also { it.mkdirs() }
     }
 
+    /**
+     * P1（路径穿越）：id 可能来自外部导入的卡 JSON（`sachat_worldbook_id` 等，不可信），
+     * 直接拼 `File(dir, "$id.json")` 会让 `"../characters/xxxx"` 落到别的数据文件上删除/覆盖。
+     * 只接受纯文件名形态的 id，其余一律拒绝。
+     */
+    private fun fileOf(context: Context, id: String): File? {
+        if (id.isBlank() || id.contains('/') || id.contains('\\') || id.contains("..")) return null
+        return File(getDir(context), "$id.json")
+    }
+
     data class WorldInfoSummary(
         val id: String,
         val name: String,
@@ -52,7 +62,7 @@ object WorldInfoManager {
     }
 
     fun load(context: Context, id: String): WorldInfo? {
-        val file = File(getDir(context), "$id.json")
+        val file = fileOf(context, id) ?: return null
         if (!file.exists()) return null
         return try {
             val json = file.readText()
@@ -70,7 +80,7 @@ object WorldInfoManager {
 
     /** 读取世界书原始 JSON（**自有格式**，仅供内部搬运） */
     fun rawJson(context: Context, id: String): String? {
-        val file = File(getDir(context), "$id.json")
+        val file = fileOf(context, id) ?: return null
         return if (file.exists()) www.cetool.com.util.SafeFiles.readText(file) else null
     }
 
@@ -147,7 +157,9 @@ object WorldInfoManager {
 
     fun saveNew(context: Context, info: WorldInfo): String {
         // 防呆：id 为空时重新生成（旧实现曾把缺失 id 写成 "null.json" 互相覆盖）
-        val id = if (info.id.isNullOrBlank()) java.util.UUID.randomUUID().toString().take(8) else info.id
+        // P1：id 可能来自导入文件（不可信），非法形态一律重新生成，防止路径穿越
+        val id = info.id?.takeIf { fileOf(context, it) != null }
+            ?: java.util.UUID.randomUUID().toString().take(8)
         val safe = info.copy(id = id)
         val json = buildJson(safe)
         val file = File(getDir(context), "$id.json")
@@ -157,13 +169,14 @@ object WorldInfoManager {
     }
 
     fun overwrite(context: Context, id: String, info: WorldInfo): Boolean {
-        val file = File(getDir(context), "$id.json")
+        val file = fileOf(context, id) ?: return false
         if (!file.exists()) return saveNew(context, info).let { true }
         return www.cetool.com.util.SafeFiles.writeAtomic(file, buildJson(info)) { it.printStackTrace() }
     }
 
     fun delete(context: Context, id: String) {
-        File(getDir(context), "$id.json").delete()
+        // P1：拒绝非法 id（路径穿越），防止删到其它数据文件
+        fileOf(context, id)?.delete()
     }
 
     private fun buildJson(info: WorldInfo): String {

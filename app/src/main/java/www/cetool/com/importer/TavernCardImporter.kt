@@ -39,9 +39,32 @@ object TavernCardImporter {
         ) {
             val embedded = extractJsonFromPng(bytes)
                 ?: return Result.failure(IllegalArgumentException("这是 PNG 图片，但未找到角色卡数据（非 SillyTavern PNG 卡）"))
-            return runCatching { parseRoot(JsonParser.parseString(embedded).asJsonObject) }
+            val card = runCatching { parseRoot(JsonParser.parseString(embedded).asJsonObject) }
+                .getOrElse { return Result.failure(it) }
+            // P2：酒馆 PNG 卡的图片本身就是角色头像 —— 原实现提取完 JSON 就丢弃图片字节，
+            // avatarBase64 恒为 null，列表/编辑器/羁绊页头像全是占位符。
+            val withAvatar = if (card.avatarBase64.isNullOrBlank()) {
+                pngAvatarBase64(bytes)?.let { card.copy(avatarBase64 = it) } ?: card
+            } else {
+                card
+            }
+            return Result.success(withAvatar)
         }
         return runCatching { parseRoot(JsonParser.parseString(String(bytes, Charsets.UTF_8)).asJsonObject) }
+    }
+
+    /** PNG 卡画面 → 头像 base64（降采样 JPEG，避免全尺寸大图入库；失败退回原始 PNG 字节） */
+    private fun pngAvatarBase64(bytes: ByteArray): String? {
+        return try {
+            val jpeg = www.cetool.com.util.ImageDecoder.decodeByteArray(bytes, maxEdge = 512)
+                ?.let { www.cetool.com.util.ImageDecoder.compress(it, android.graphics.Bitmap.CompressFormat.JPEG, 85, maxEdge = 512) }
+            val payload = jpeg ?: bytes
+            android.util.Base64.encodeToString(payload, android.util.Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
+        } catch (_: OutOfMemoryError) {
+            null
+        }
     }
 
     private fun parseRoot(root: com.google.gson.JsonObject): TavernCard {

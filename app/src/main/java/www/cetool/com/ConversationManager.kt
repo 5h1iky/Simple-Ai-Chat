@@ -23,6 +23,9 @@ object ConversationManager {
     /** 允许用于深度注入的消息角色（injectRole 可能来自不可信的酒馆文件） */
     private val VALID_ROLES = setOf("system", "user", "assistant")
 
+    /** 酒馆 Outlet 手动拉取宏：{{outlet::名称}}（P1-11：原实现只有注释、无解析） */
+    private val OUTLET_MACRO = Regex("""\{\{outlet::([^}]*)\}\}""", RegexOption.IGNORE_CASE)
+
     /** 冒险模式 DM/GM 系统指令（中英双语资源，跟随 UI 语言） */
     val ADVENTURE_DM_PROMPT: String
         get() = appContext.getString(R.string.adventure_dm_prompt)
@@ -298,18 +301,41 @@ object ConversationManager {
             charDefinition = conv.systemPrompt
         }
 
-        // 世界书多源：会话绑定（可多本，Chat Lore）+ 角色卡内嵌（Character Lore）
+        // 世界书多源：会话绑定（可多本，Chat Lore）+ 角色卡内嵌（Character Lore）。
+        // P2（重复注入）：两路来源必须按 id 去重 —— 会话手动绑定的书恰是角色卡内嵌书时，
+        // 同一本书被 scan 两次 → 条目重复注入、sortAndBudget 双倍扣预算。
         val worldSources = mutableListOf<www.cetool.com.model.WorldInfo>()
+        val seenWorldIds = mutableSetOf<String>()
         for (wid in conv.boundWorldIds()) {
+            if (!seenWorldIds.add(wid)) continue
             WorldInfoManager.load(appContext, wid)?.let { worldSources.add(it) }
         }
-        if (characterLoreId != null) {
+        if (characterLoreId != null && seenWorldIds.add(characterLoreId!!)) {
             WorldInfoManager.load(appContext, characterLoreId!!)?.let { worldSources.add(it) }
         }
 
+        // P1-11：收集 Outlet 条目供 {{outlet::名称}} 手动拉取。
+        // 酒馆语义：position=7 的条目从不自动注入，只由该宏按名称拉取。
+        // 原实现 sortAndBudget/buildInjection 已把它排除在自动注入外，但宏解析全项目缺失
+        // → outlet 内容永久消失。这里在世界书加载后建立 名称 → 内容 映射。
+        val outletEntries = LinkedHashMap<String, String>()
+        for (source in worldSources) {
+            for (e in source.entries) {
+                if (e.position == "outlet" && e.enabled && e.name.isNotBlank()) {
+                    outletEntries.putIfAbsent(e.name.trim(), e.content)
+                }
+            }
+        }
+
+        // P1（扫描窗口）：sendMessage 刚追加的空 assistant 流式占位必须排除在
+        // 扫描窗口之外 —— buildSearchSpace 按 messages.size - scanDepth 取尾部，
+        // 空占位白吃一个名额（scanDepth=1 的条目窗口 = [空占位]，非常驻条目永不命中）。
+        val scanMessages = conv.messages.dropLastWhile {
+            it.role == ROLE_ASSISTANT && it.content.isBlank()
+        }
         val allHits = mutableListOf<www.cetool.com.model.WorldEntry>()
         for (source in worldSources) {
-            allHits.addAll(WorldInfoEngine.scan(conv.messages, source, historyItems))
+            allHits.addAll(WorldInfoEngine.scan(scanMessages, source, historyItems))
         }
 
         val budgetPrefs = appContext.getSharedPreferences(SettingsKeys.PREFS_NAME, Context.MODE_PRIVATE)
@@ -321,11 +347,12 @@ object ConversationManager {
         injection?.beforeCharDefs?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
         if (charDefinition.isNotBlank()) systemParts.add(charDefinition)
         injection?.afterCharDefs?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
-        if (charExamples.isNotBlank()) {
-            injection?.beforeExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
-            systemParts.add(charExamples)
-            injection?.afterExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
-        }
+        // P1（EM 槽）：before/afterExamples 原先只在 charExamples 非空时才拼入 ——
+        // 角色无 mes_example / 无角色卡会话时条目静默消失，却已在 sortAndBudget 里
+        // 白占预算挤掉可注入条目。现在无论有无示例都按相对位置注入。
+        injection?.beforeExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
+        if (charExamples.isNotBlank()) systemParts.add(charExamples)
+        injection?.afterExamples?.takeIf { it.isNotBlank() }?.let { systemParts.add(it) }
         if (extraSystemPrompt.isNotBlank()) systemParts.add(extraSystemPrompt)
 
         val systemText = systemParts.filter { it.isNotBlank() }.joinToString("\n\n")
@@ -368,9 +395,14 @@ object ConversationManager {
 
         // @D 深度注入：从末尾数第 injectDepth 条消息的位置插入 system 消息（酒馆语义，depth 0 = 提示词底部）。
         // 此时 historyItems 的末尾是**最新的用户消息**（构造循环排除了尾部空的 assistant 占位），
-        // 要让 depth=0 落在它之后，插入点应是 size - depth（原实现 size-1-depth 整体差一位）。
+        // 要让 depth=0 落在它之后，插入点应是 size - depth。
+        //
+        // P2（多条挤位）：必须**从深到浅**逐条插入。每次 add 都让 size+1，
+        // 若按升序（浅→深）插入，后一条的 size-depth 会把已注入条目也数进深度，
+        // 第 k 条实际深度偏浅 k-1 位。降序插入时，先插入的更深条目位于更下方，
+        // 不影响后续浅条目的目标下标（(size+1)-depth 恰好等于正确位置）。
         if (injection != null && injection.atDepth.isNotEmpty()) {
-            for (entry in injection.atDepth) {
+            for (entry in injection.atDepth.sortedByDescending { it.injectDepth }) {
                 if (entry.content.isBlank()) continue
                 val depth = entry.injectDepth.coerceAtLeast(0)
                 val insertIndex = (historyItems.size - depth).coerceIn(0, historyItems.size)
@@ -398,11 +430,21 @@ object ConversationManager {
         // {{char}}：角色卡名字优先，退回 AI 显示名
         val macroCharName = charDisplayName(activeCard)
         historyItems.replaceAll { item ->
-            val text = item.content.asJsonPrimitive?.asString ?: return@replaceAll item
+            // P1：MessageItem.multimodal / withFile 的 content 是 JsonArray，
+            // Gson 的 getAsJsonPrimitive() 对非原始元素**抛 IllegalStateException**
+            //（`?.` 只防空引用不拦异常）→ 只要历史里有一条带附件的消息就整轮发送失败。
+            // 必须先用 isJsonPrimitive 判型（与全项目其它 20 处写法一致）。
+            val text = item.content.takeIf { it.isJsonPrimitive }?.asString ?: return@replaceAll item
             if (!text.contains("{{")) return@replaceAll item
+            // P1-11：{{outlet::名称}} 手动拉取（酒馆 Outlet 条目唯一进入提示词的途径）
+            val afterOutlet = if (outletEntries.isNotEmpty() && text.contains("{{outlet::", ignoreCase = true)) {
+                OUTLET_MACRO.replace(text) { m -> outletEntries[m.groupValues[1].trim()] ?: m.value }
+            } else {
+                text
+            }
             MessageItem.text(
                 item.role,
-                text.replace("{{user}}", macroUserName).replace("{{char}}", macroCharName)
+                afterOutlet.replace("{{user}}", macroUserName).replace("{{char}}", macroCharName)
             )
         }
 
@@ -466,6 +508,11 @@ object ConversationManager {
             },
             onError = { errorMsg ->
                 val existing = getById(conversationId) ?: return@sendChatStream
+                // P2（迟到的取消回调）：okhttp 的 cancel() 必然走 onFailure→onError。
+                // 取消/清空/删除已把 isStreaming 复位时，迟到的 onError 不得再把
+                // "[错误: canceled]" 写进（可能是清空后新建的）助手消息，
+                // 也不得摘掉可能已登记的新流句柄。
+                if (!existing.isStreaming) return@sendChatStream
                 val lastIndex = existing.messages.size - 1
                 if (lastIndex >= 0) {
                     val lastMsg = existing.messages[lastIndex]

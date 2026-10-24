@@ -70,8 +70,10 @@ object WebSearchClient {
                 addProperty("q", query)
             }
 
+            // P2：带 query/fragment 的地址不能用字符串拼接（会拼进查询串），
+            // 与 AiApiClient 同用 HttpUrl 路径段追加。
             val url = if (trimmed.contains("/chat/completions")) trimmed
-            else "${trimmed.trimEnd('/')}/chat/completions"
+            else AiApiClient.appendPath(trimmed, "chat/completions")
 
             val request = Request.Builder()
                 .url(url)

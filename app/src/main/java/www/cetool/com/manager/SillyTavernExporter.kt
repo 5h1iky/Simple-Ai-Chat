@@ -35,6 +35,9 @@ object SillyTavernExporter {
         val root = JsonObject()
         root.addProperty("name", info.name)
         if (info.description.isNotBlank()) root.addProperty("description", info.description)
+        // P2：书级启用状态是本项目自有语义（ST 格式无此键）—— 用自定义键携带
+        //（酒馆忽略未知键），本项目导入器读 `enabled`，避免停用的书导出→导入后复活。
+        root.addProperty("enabled", info.enabled)
 
         val entries = JsonObject()
         info.entries.forEachIndexed { index, e ->
@@ -120,14 +123,20 @@ object SillyTavernExporter {
      * 因此若无条件优先 stPosition，「界面上改过的注入位置」会在导出时被静默回退。
      *
      * 例外：当原始编号映射到的槽位与当前 position 一致时保留原始编号
-     *（例如酒馆的 5=EMTop 与 2=ANTop 在本项目里是同一个槽位，
-     * 用户没动过位置就应原样导出，而不是被压成 2）。
+     *（如 before/after/depth/outlet 等一一对应的槽位原样回写）。
+     * 导入自 2=ANTop / 3=ANBottom 的条目会被归一成 5=EMTop / 6=EMBottom：
+     * 本项目没有 Author's Note 槽位，这两组在内部都被折叠进「示例对话前/后」槽，
+     * 导出成 5/6 才与本项目实际注入位置（包住 charExamples）一致。
      */
     fun stPositionFor(e: WorldEntry): Int {
         val mapped = when (e.position) {
             "before_char_defs" -> 0
-            "before_example_messages" -> 2
-            "after_example_messages" -> 3
+            // P2：本项目的「示例对话前/后」槽包住 charExamples，语义是 EM 槽 ——
+            // 导出编号必须用 5=EMTop / 6=EMBottom（原写 2/3=ANTop/ANBottom，
+            // 本项目新建的示例槽条目到了真酒馆会进 Author's Note 块）。
+            // 导入过 2/3 的条目仍按 stPosition 原样回写（见下方例外分支）。
+            "before_example_messages" -> 5
+            "after_example_messages" -> 6
             "at_depth" -> 4
             "outlet" -> 7
             else -> 1 // after_char_defs / after_system_prompt

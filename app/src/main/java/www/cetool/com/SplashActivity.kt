@@ -188,8 +188,10 @@ class SplashActivity : ComponentActivity() {
             ?: SettingsKeys.PROVIDER_CUSTOM
         val isFreeMode = providerMode == SettingsKeys.PROVIDER_OPEN_KILO ||
             providerMode == SettingsKeys.PROVIDER_OPEN_CODE_ZEN
+        // P1：与 ChatActivity 入口校验同口径 —— 地址合法即可进入（key/model 可为空，
+        // 支持 Ollama / LM Studio 等免密钥端点），否则保存后会被弹回来形成死循环。
         val isValid = isFreeMode ||
-            (apiUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank())
+            (apiUrl.isNotBlank() && ApiConfig.validateUrl(apiUrl) == null)
 
         val target = if (isValid) {
             Intent(this, ChatActivity::class.java)

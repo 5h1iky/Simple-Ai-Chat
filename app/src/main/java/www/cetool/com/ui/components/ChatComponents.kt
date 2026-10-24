@@ -515,12 +515,19 @@ private fun AttachmentCard(
     val shape = RoundedCornerShape(12.dp)
 
     if (attachment.type == Message.ATTACH_TYPE_IMAGE) {
-        // 图片：缓存解码结果，key 为 base64 长度（内容变化时长度必然变化）
-        val bitmap = remember(attachment.data.length) {
+        // 图片：缓存解码结果，key 为 base64 内容本身（原用 data.length ——
+        // 「长度变化 ⇔ 内容变化」是错误假设，长度相同的两张不同图会显示旧图）
+        val bitmap = remember(attachment.data) {
             try {
                 val bytes = Base64.decode(attachment.data, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                // D3 同款限尺寸解码：旧数据/导入数据可能存全尺寸大图，直接 decode
+                // 一张 8000×6000 就要约 192MB，必须先降采样。
+                www.cetool.com.util.ImageDecoder.decodeByteArray(bytes, maxEdge = 1024)
             } catch (_: Exception) {
+                null
+            } catch (_: OutOfMemoryError) {
+                // P1：OutOfMemoryError 是 Error 不是 Exception —— 与 ChatAvatar 一致双 catch，
+                // 否则组合期抛 OOM 会让该会话每次打开都复崩。
                 null
             }
         }

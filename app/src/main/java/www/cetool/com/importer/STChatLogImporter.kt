@@ -28,10 +28,15 @@ object STChatLogImporter {
             val isUser = obj.get("is_user")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
             val isSystem = obj.get("is_system")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
             val mes = obj.get("mes")?.takeIf { it.isJsonPrimitive }?.asString ?: return@forEach
-            if (isSystem && mes.isBlank()) return@forEach
+            // 空白消息导入进来只是空气泡，没有信息量，直接跳过
+            if (mes.isBlank()) return@forEach
 
+            // P2：酒馆真实导出的 create_date 是 "2024-02-11 @13h 20m 19s 942ms" 风格、
+            // send_date 是本地化字符串 —— 原实现三种 pattern 都匹配不上且不读 send_date，
+            // 时间戳全部 fallback 成「导入时刻起每秒一条」。这里补上 ST 风格解析与 send_date 兜底。
             val createDate = obj.get("create_date")?.takeIf { it.isJsonPrimitive }?.asString
-            val ts = parseDate(createDate) ?: (lastTimestamp + 1000)
+            val sendDate = obj.get("send_date")?.takeIf { it.isJsonPrimitive }?.asString
+            val ts = parseDate(createDate) ?: parseDate(sendDate) ?: (lastTimestamp + 1000)
             lastTimestamp = ts
 
             val role = if (isUser) Message.ROLE_USER else Message.ROLE_ASSISTANT
@@ -64,8 +69,21 @@ object STChatLogImporter {
         messages
     }
 
+    /** 酒馆 create_date 的典型形态："2024-02-11 @13h 20m 19s 942ms"（也覆盖 ISO/常见分隔符） */
+    private val ST_DATE_REGEX = Regex("""(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})""")
+
     private fun parseDate(text: String?): Long? {
         if (text.isNullOrBlank()) return null
+        // 1) 酒馆 "@Xh Ym Zs Wms" 风格优先
+        ST_DATE_REGEX.find(text)?.let { m ->
+            return try {
+                val (y, mo, d, h, mi, s) = m.destructured
+                val cal = java.util.Calendar.getInstance()
+                cal.set(y.toInt(), mo.toInt() - 1, d.toInt(), h.toInt(), mi.toInt(), s.toInt())
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            } catch (_: Exception) { null }
+        }
         return try {
             val formats = listOf(
                 "yyyy-MM-dd HH:mm:ss",

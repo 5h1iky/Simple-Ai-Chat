@@ -180,14 +180,19 @@ class CharacterEditActivity : ComponentActivity() {
         val description = state.description.trim().ifBlank {
             fields.backgroundStory.ifBlank { fields.overallVibe }
         }
-        val personality = listOf(fields.externalPersonality, fields.internalPersonality)
+        // P1：personality 在编辑表单里没有独立输入，只有结构化「外在/内在性格」会回填。
+        // 结构化字段为空时必须保留原卡 personality 文本 —— 原实现用拼接值**无条件覆盖**，
+        // 导入的手写 personality 卡「打开编辑器点保存（哪怕一字不改）」即被永久清空。
+        val structuredPersonality = listOf(fields.externalPersonality, fields.internalPersonality)
             .filter { it.isNotBlank() }.joinToString("；")
 
         // A3 / B1 / B28：重建 TavernCardData 会让未列出的字段全部回落到默认值，
         // 导致 scenario / creator / creator_notes / character_version / alternate_greetings /
         // character_book / assets / nickname 等被永久清空（覆写文件不可逆）。
         // 正确做法是 copy 原对象，只改编辑界面真正拥有的那几项。
-        val old = editCharacterId?.let { CharacterManager.loadCard(this, it)?.data }
+        val oldCard = editCharacterId?.let { CharacterManager.loadCard(this, it) }
+        val old = oldCard?.data
+        val personality = structuredPersonality.ifBlank { old?.personality ?: "" }
         val data = (old ?: TavernCardData()).copy(
             name = name,
             description = description,
@@ -199,7 +204,14 @@ class CharacterEditActivity : ComponentActivity() {
             tags = state.legacyTags
         ).withCharacterFields(fields)
 
-        val card = TavernCard(data = data, avatarBase64 = avatar)
+        // P2：spec / spec_version 必须保留原卡的值 —— 重新构造会把 v1/v2 卡
+        // 一律篡改成 chara_card_v3 / 3.0（对照记忆封存回写路径是保留原值的）。
+        val card = TavernCard(
+            spec = oldCard?.spec ?: "chara_card_v3",
+            spec_version = oldCard?.spec_version ?: "3.0",
+            data = data,
+            avatarBase64 = avatar
+        )
         val json = Gson().toJson(card)
 
         // C4：保存路径原本没有 IO 保护 —— writeText 在磁盘满/权限异常时抛 IOException，

@@ -6,6 +6,8 @@
 
 SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-compatible endpoint, and ships with several free model providers, so you can use it without a key.
 
+**v2.1.4**: Stability & correctness release — fixes attachment/image messages failing to send, personality being cleared when saving card edits, the system-prompt editor overwriting with stale text, errors misreported as "HTTP 200", keyless endpoints (e.g. Ollama) being bounced back to Settings, and world-book keyword matching bugs (regex case handling, scan depth, regex-flag import). See AUDIT_REPORT_2026-10-24.md for the full fix list.
+
 **v2.1.2**: Attachment handling reworked — files are sent as proper content blocks instead of being pasted into the user message, and are rendered as file cards / image thumbnails in the chat bubble. Free-model lists are now fetched dynamically from each provider.
 
 > **v2.1.2** — Large files are never rendered inline; a full-screen viewer shows the content on demand, with a token estimate on the card.
@@ -61,7 +63,7 @@ SAChat is an Android AI chat app: it supports custom API keys for any OpenAI-com
 
 Get the latest APK from the [Releases page](https://github.com/5h1iky/Simple-Ai-Chat/releases).
 
-**Current version: v2.1.2**
+**Current version: v2.1.4**
 
 > Requires Android 7.0 (API 24) or above.
 

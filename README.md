@@ -9,6 +9,10 @@
 
 SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入任意 OpenAI 兼容接口，内置了多个免费模型，无需密钥即可使用。
 
+**v2.1.4**：稳定性与正确性修复版本 —— 修复附件/图片消息无法发送、编辑角色卡清空 personality、系统提示词编辑器覆盖、错误信息误报 "HTTP 200"、免密钥端点无法进入聊天、世界书关键词匹配（正则大小写/扫描深度/正则标志）等一系列逻辑缺陷（详见 AUDIT_REPORT_2026-10-24.md）。
+
+> **v2.1.4** — Stability & correctness release: fixes attachment/image messages failing to send, personality being cleared on card edit, system-prompt editor overwriting with stale text, errors misreported as "HTTP 200", keyless endpoints being bounced back to Settings, and world-book keyword matching bugs (regex case handling, scan depth, regex flag import).
+
 **v2.1.2**：附件上传改为标准化实现（文件不再拼进用户消息正文，气泡内显示文件卡片/图片缩略图），免费模型列表改为从提供商动态获取。
 
 > **v2.1.2** — Attachment handling reworked: files are sent as proper content blocks instead of being pasted into the user message, and are now rendered as file cards / image thumbnails in the chat bubble. Free-model lists are fetched dynamically from each provider.
@@ -64,7 +68,7 @@ SAChat 是一款 Android 端的 AI 聊天应用：支持自定义 API Key 接入
 
 前往 [Releases 页面](https://github.com/5h1iky/Simple-Ai-Chat/releases) 下载最新版 APK 安装包。
 
-**当前版本：v2.1.2**
+**当前版本：v2.1.4**
 
 > 需要 Android 7.0（API 24）及以上设备。
 

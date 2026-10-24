@@ -56,4 +56,12 @@ data class ApiConfig(
 
     /** 地址是否可用（形态合法 + 内容完整） */
     fun isUsable(): Boolean = isValid() && validateUrl(apiUrl) == null
+
+    /**
+     * P1：进入聊天页的最低要求 —— 地址合法即可。
+     * key / model 允许为空（E3：Ollama、LM Studio 等局域网端点通常无 key），
+     * 但 ChatActivity / SplashActivity 原用 isValid()（要求 key/model 全非空）把守，
+     * 免密钥端点在设置页保存成功后仍被弹回设置页，形成死循环。
+     */
+    fun hasUsableUrl(): Boolean = apiUrl.isNotBlank() && validateUrl(apiUrl) == null
 }

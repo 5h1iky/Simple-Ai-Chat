@@ -115,6 +115,14 @@ class WorldInfoEditActivity : ComponentActivity() {
                 enabled = info.enabled
                 entries.clear()
                 entries.addAll(info.entries)
+            } ?: run {
+                // P2：文件存在但解析失败时绝不能按「空书」打开让用户保存 ——
+                // 那会把可能只是一处损坏的原文件覆盖成 0 条目（不可逆数据丢失）。
+                if (WorldInfoManager.rawJson(this, id) != null) {
+                    Toast.makeText(this, getString(R.string.world_edit_load_failed), Toast.LENGTH_LONG).show()
+                    finish()
+                    return
+                }
             }
         }
 
@@ -659,15 +667,18 @@ private fun ToggleLabel(
  *
  * B22：正则模式下关键词里允许出现逗号（`a{1,3}`、`\d{2,4}`、`(foo|bar){2,3}`），
  * 若按逗号 join 再按逗号 split，一条键会被永久切成两条。所以正则模式一律「一行一个」。
- * 导入侧（WorldInfoImporter.stripRegexDelimiters）已剥掉 /.../ 定界符，这里不再加回，
- * 保证 显示 → 保存 → 再显示 完全等幂。
+ *
+ * P2：非正则模式同病 —— 含逗号的字面键（`Hello, world`）「打开编辑器点保存」就会被
+ * 切碎（join(", ") → split(',', ...)）。逗号/顿号不是无歧义的分隔符，**两种模式统一
+ * 一行一个**，从结构上杜绝往返改写。导入侧（WorldInfoImporter.stripRegexDelimiters）
+ * 已剥掉 /.../ 定界符，这里不再加回，保证 显示 → 保存 → 再显示 完全等幂。
  */
 private fun joinKeywords(list: List<String>, regexMode: Boolean): String =
-    if (regexMode) list.joinToString("\n") else list.joinToString(", ")
+    list.joinToString("\n")
 
 /**
  * 切换正则开关时把编辑框里的关键词文本按新模式重排（先按旧模式切，再按新模式拼）。
- * 关闭正则时如果用户用的是换行分隔，会合并回逗号形式；开启正则时逗号分隔的会被拆成多行。
+ * 两种模式均为「一行一个」，此函数仅做逐行 trim 归一。
  */
 private fun reformatKeywords(text: String, fromRegex: Boolean, toRegex: Boolean): String {
     if (fromRegex == toRegex) return text
@@ -676,11 +687,10 @@ private fun reformatKeywords(text: String, fromRegex: Boolean, toRegex: Boolean)
 
 /**
  * 编辑框文本 → 关键词列表。
- * 非正则：逗号 / 中文逗号 / 顿号 / 换行 都算分隔符（保持旧行为）。
- * 正则：只按换行切，逐行 trim 后去空行，行内逗号原样保留。
+ * 两种模式都只按换行切，逐行 trim 后去空行，行内逗号/顿号原样保留（P2）。
  */
 private fun splitKeywords(text: String, regexMode: Boolean): MutableList<String> {
-    val raw = if (regexMode) text.split('\n') else text.split(',', '，', '、', '\n')
+    val raw = text.split('\n')
     return raw.map { it.trim() }
         .filter { it.isNotBlank() }
         .toMutableList()

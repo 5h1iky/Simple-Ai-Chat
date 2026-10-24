@@ -44,64 +44,66 @@
           同时避免 ChatActivity 因转屏重建而打断进行中的流式回复（A4 的现实触发路径之一）。
 
           注意：不声明 "locale"，系统语言变化时仍应重建以重新注入 locale。
+          P2：补上 "uiMode" —— 系统深色模式切换原本会重建 Activity，
+          聊天草稿输入与待发附件静默丢失（Compose 会随 uiMode 正常重组换肤）。
         -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <activity
             android:name=".ChatActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <activity
             android:name=".AboutActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <!-- Compose 页面（1.1 角色卡） -->
         <activity
             android:name=".CharacterListActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <activity
             android:name=".CharacterEditActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <!-- Compose 页面（1.2 世界书） -->
         <activity
             android:name=".WorldInfoListActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <activity
             android:name=".WorldInfoEditActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <!-- Compose 页面（2.1 羁绊档案） -->
         <activity
             android:name=".BondActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
         <!-- Compose 页面（2.2 文字冒险） -->
         <activity
             android:name=".AdventureActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|fontScale|uiMode"
             android:theme="@style/Theme.CRtools" />
 
     </application>
